@@ -1,0 +1,130 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "nodriver",
+  "projectDescription": "Async Python framework for undetected browser automation and web scraping, bypassing anti-bot systems like Captcha and CloudFlare",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/browser",
+              "concepts/tabs",
+              "concepts/elements",
+              "concepts/configuration"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/element-interaction",
+              "guides/navigation",
+              "guides/cookies-and-storage",
+              "guides/screenshots",
+              "guides/bypassing-detection",
+              "guides/headless-mode",
+              "guides/advanced-cdp"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-scraping",
+              "examples/form-automation",
+              "examples/cloudflare-bypass",
+              "examples/multi-tab"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/start",
+              "api/loop",
+              "api/browser",
+              "api/tab",
+              "api/element",
+              "api/config"
+            ]
+          },
+          {
+            "group": "CDP Integration",
+            "pages": [
+              "api/cdp/overview",
+              "api/cdp/usage"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities",
+              "api/exceptions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Async browser automation without Selenium or ChromeDriver",
+    "Built-in anti-detection bypassing Captcha, CloudFlare, and bot systems",
+    "Direct Chrome DevTools Protocol (CDP) communication",
+    "Smart element finding by text and CSS selectors with auto-retry",
+    "Cookie management and local storage support",
+    "Multi-tab and multi-window control",
+    "Screenshot and DOM manipulation",
+    "XPath selector support",
+    "CloudFlare verification helper methods"
+  ],
+  "publicApiSurface": [
+    "start()",
+    "loop()",
+    "Browser",
+    "Browser.get()",
+    "Browser.tabs",
+    "Browser.cookies",
+    "Tab",
+    "Tab.find()",
+    "Tab.find_all()",
+    "Tab.select()",
+    "Tab.select_all()",
+    "Tab.xpath()",
+    "Tab.get()",
+    "Tab.reload()",
+    "Tab.save_screenshot()",
+    "Tab.get_content()",
+    "Tab.scroll_down()",
+    "Tab.scroll_up()",
+    "Tab.cf_verify()",
+    "Tab.get_local_storage()",
+    "Tab.set_local_storage()",
+    "Tab.send()",
+    "Tab.add_handler()",
+    "Element",
+    "Element.click()",
+    "Element.send_keys()",
+    "Element.flash()",
+    "Element.mouse_move()",
+    "Element.scroll_into_view()",
+    "Config",
+    "cdp"
+  ]
+}
