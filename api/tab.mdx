@@ -378,6 +378,42 @@ data = await tab.evaluate('''
 print(data)
 ```
 
+### js_dumps()
+
+Dump a JavaScript object with its properties and values as a Python dictionary.
+
+```python
+async def js_dumps(
+    self,
+    obj_name: str,
+    return_by_value: bool = True
+) -> Union[Dict, Tuple]
+```
+
+<ParamField path="obj_name" type="str" required>
+  Name of the JavaScript object to dump (e.g., "window", "document", "navigator").
+</ParamField>
+
+<ParamField path="return_by_value" type="bool" default="True">
+  Return the value directly as a dict. If False, returns the remote object reference.
+</ParamField>
+
+<Note>
+  Complex objects might not be fully serializable. This method provides a best-effort conversion to Python dictionaries.
+</Note>
+
+**Example:**
+
+```python
+# Dump the navigator object
+navigator_data = await tab.js_dumps('navigator')
+print(navigator_data['userAgent'])
+print(navigator_data['platform'])
+
+# Dump window.performance
+performance = await tab.js_dumps('window.performance')
+```
+
 ## Window Management
 
 ### maximize()
@@ -403,6 +439,18 @@ Set window to fullscreen.
 ```python
 async def fullscreen(self)
 ```
+
+### medimize()
+
+Restore window to normal size (not minimized, maximized, or fullscreen).
+
+```python
+async def medimize(self)
+```
+
+<Note>
+  This is a convenience alias for `set_window_state(state="normal")`.
+</Note>
 
 ### set_window_size()
 
@@ -646,6 +694,64 @@ await tab.set_local_storage({
 # Get localStorage
 storage = await tab.get_local_storage()
 print(storage)
+```
+
+## Anti-Detection & Security
+
+### verify_cf()
+
+Verify Cloudflare checkbox challenge automatically. This method locates and clicks the Cloudflare verification checkbox.
+
+```python
+async def verify_cf(
+    self,
+    template_image: str = None,
+    flash: bool = False
+)
+```
+
+<ParamField path="template_image" type="str" default="None">
+  Custom template image for locating the checkbox. The default template is in English. If you need a different language, create a cropped image (111x71 pixels) with the checkbox target centered.
+</ParamField>
+
+<ParamField path="flash" type="bool" default="False">
+  If True, flashes the located checkbox area for debugging.
+</ParamField>
+
+<Warning>
+  This method only works when NOT in expert mode. Requires the `opencv-python` package to be installed.
+</Warning>
+
+**Example:**
+
+```python
+# Verify Cloudflare challenge
+await tab.verify_cf()
+
+# Use custom template for different language
+await tab.verify_cf(template_image='path/to/custom_cf_template.png')
+```
+
+### bypass_insecure_connection_warning()
+
+Bypass the browser's insecure connection warning (e.g., when a certificate is invalid).
+
+```python
+async def bypass_insecure_connection_warning(self)
+```
+
+<Note>
+  This method sends the special string "thisisunsafe" to bypass Chrome's SSL warning page.
+</Note>
+
+**Example:**
+
+```python
+# Navigate to site with invalid certificate
+await tab.get('https://site-with-invalid-cert.com')
+
+# Bypass the warning
+await tab.bypass_insecure_connection_warning()
 ```
 
 ## Waiting and Timing
