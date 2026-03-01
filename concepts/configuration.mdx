@@ -1,0 +1,481 @@
+---
+title: Configuration options
+description: Detailed guide to configuring browser instances with the Config class
+---
+
+The `Config` class controls browser launch parameters, behavior, and Chrome command-line arguments. It provides a flexible way to customize your browser automation setup.
+
+## Creating a configuration
+
+You can create a Config object explicitly or let the browser create one automatically:
+
+```python
+from nodriver import Config, Browser
+
+# Create config explicitly
+config = Config(
+    headless=False,
+    browser_executable_path='/path/to/chrome',
+    user_data_dir='./my-profile'
+)
+
+browser = await Browser.create(config=config)
+```
+
+```python
+# Or pass parameters directly to Browser.create()
+browser = await Browser.create(
+    headless=False,
+    sandbox=True
+)
+```
+
+<Info>
+  When you don't provide a Config object, nodriver creates one with sensible defaults automatically.
+</Info>
+
+## Configuration parameters
+
+### User data directory
+
+Specify where browser profile data is stored:
+
+<ParamField path="user_data_dir" type="PathLike" default="AUTO">
+  Path to the browser profile directory. If not specified, a temporary directory is created and cleaned up on exit.
+</ParamField>
+
+```python
+config = Config(user_data_dir='/path/to/profile')
+```
+
+**Use cases:**
+- Persist cookies and login sessions between runs
+- Maintain browser extensions
+- Store cached data
+
+<Note>
+  When you provide a custom `user_data_dir`, it will NOT be automatically deleted. When using the auto-generated directory, it's cleaned up when the browser closes.
+</Note>
+
+### Headless mode
+
+<ParamField path="headless" type="bool" default="False">
+  Run the browser without a visible window. Uses the new `--headless=new` flag.
+</ParamField>
+
+```python
+# Headless mode
+config = Config(headless=True)
+
+# Visible browser (default)
+config = Config(headless=False)
+```
+
+**When to use headless:**
+- Server environments without displays
+- Automated testing pipelines
+- Background scraping tasks
+- When you don't need visual feedback
+
+<Warning>
+  Some websites detect headless browsers. nodriver automatically patches the user agent to remove "Headless" markers, but detection may still occur.
+</Warning>
+
+### Browser executable
+
+<ParamField path="browser_executable_path" type="PathLike" default="AUTO">
+  Path to the Chrome/Chromium executable. Auto-detected if not provided.
+</ParamField>
+
+```python
+config = Config(
+    browser_executable_path='/usr/bin/google-chrome-stable'
+)
+```
+
+The auto-detection searches for:
+- Google Chrome
+- Chromium
+- Chrome Beta
+- Chrome Canary
+
+**Detection paths:**
+
+**Linux/macOS:**
+- `/usr/bin/google-chrome`
+- `/usr/bin/chromium`
+- `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` (macOS)
+
+**Windows:**
+- `C:\Program Files\Google\Chrome\Application\chrome.exe`
+- `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`
+
+### Browser arguments
+
+<ParamField path="browser_args" type="List[str]" default="AUTO">
+  Additional command-line arguments passed to Chrome.
+</ParamField>
+
+```python
+config = Config(
+    browser_args=[
+        '--window-size=1920,1080',
+        '--start-maximized',
+        '--disable-gpu'
+    ]
+)
+```
+
+You can also add arguments after creation:
+
+```python
+config = Config()
+config.add_argument('--window-size=1920,1080')
+config.add_argument('--disable-gpu')
+```
+
+<Warning>
+  Some arguments are managed by Config properties and should not be added manually:
+  - `--headless` (use `headless` parameter)
+  - `--user-data-dir` (use `user_data_dir` parameter)
+  - `--no-sandbox` (use `sandbox` parameter)
+  - `--lang` (use `lang` parameter)
+</Warning>
+
+### Sandbox mode
+
+<ParamField path="sandbox" type="bool" default="True">
+  Enable Chrome's sandbox for security. Automatically disabled when running as root on Linux.
+</ParamField>
+
+```python
+# Disable sandbox (sometimes needed in Docker)
+config = Config(sandbox=False)
+```
+
+<Note>
+  On Linux systems, if you're running as root, sandbox is automatically disabled even if you set `sandbox=True`.
+</Note>
+
+### Language
+
+<ParamField path="lang" type="str" default="'en-US'">
+  Browser language setting.
+</ParamField>
+
+```python
+config = Config(lang='de-DE')
+```
+
+### Connection settings
+
+<ParamField path="host" type="str" default="AUTO">
+  Host for the DevTools Protocol connection. Defaults to "127.0.0.1" when starting a new browser.
+</ParamField>
+
+<ParamField path="port" type="int" default="AUTO">
+  Port for the DevTools Protocol connection. Auto-assigned to a free port when starting a new browser.
+</ParamField>
+
+```python
+# Connect to existing Chrome instance
+config = Config(
+    host='127.0.0.1',
+    port=9222
+)
+```
+
+<Info>
+  When both `host` and `port` are specified, nodriver connects to an existing browser instead of launching a new one.
+</Info>
+
+### Expert mode
+
+<ParamField path="expert" type="bool" default="AUTO">
+  Enable expert mode with additional debugging capabilities.
+</ParamField>
+
+```python
+config = Config(expert=True)
+```
+
+**Expert mode includes:**
+- `--disable-site-isolation-trials` flag
+- Ensures shadow roots are always in "open" mode
+- Additional debugging scripts
+
+<Note>
+  Expert mode is useful for development and debugging but may affect page behavior.
+</Note>
+
+### Target discovery
+
+<ParamField path="autodiscover_targets" type="bool" default="True">
+  Automatically discover and track new browser targets (tabs, windows, iframes).
+</ParamField>
+
+```python
+config = Config(autodiscover_targets=True)
+```
+
+This enables automatic updates when:
+- New tabs are opened
+- Windows are created
+- Tabs are closed
+- Target information changes
+
+## Default browser arguments
+
+nodriver includes sensible defaults that are always applied:
+
+```python
+--remote-allow-origins=*       # Allow DevTools connections
+--no-first-run                 # Skip first run dialogs
+--no-service-autorun           # Disable service auto-run
+--no-default-browser-check     # Skip default browser check
+--homepage=about:blank         # Start with blank page
+--no-pings                     # Disable hyperlink auditing
+--password-store=basic         # Use basic password store
+--disable-infobars             # Hide infobars
+--disable-breakpad             # Disable crash reporting
+--disable-dev-shm-usage        # Fix shared memory issues
+--disable-session-crashed-bubble
+--disable-search-engine-choice-screen
+```
+
+## Extensions
+
+Load browser extensions:
+
+```python
+config = Config()
+config.add_extension('/path/to/extension')
+config.add_extension('/path/to/extension.crx')
+```
+
+<ParamField path="extension_path" type="PathLike" required>
+  Path to extension folder (containing manifest.json) or .crx file.
+</ParamField>
+
+```python
+# Load extension from folder
+config.add_extension('./my-extension')
+
+# Load from .crx file (auto-extracted)
+config.add_extension('./my-extension.crx')
+```
+
+## Inspecting configuration
+
+Get the final list of arguments:
+
+```python
+config = Config(headless=True, sandbox=False)
+args = config()  # Returns list of all arguments
+
+for arg in args:
+    print(arg)
+```
+
+View configuration details:
+
+```python
+config = Config(headless=True)
+print(config)
+```
+
+Output:
+```
+Config
+    browser_executable_path = /usr/bin/google-chrome
+    headless = True
+    sandbox = False
+    host = None
+    port = None
+    ...
+```
+
+## Utility functions
+
+### Find Chrome executable
+
+Manually find Chrome installation:
+
+```python
+from nodriver.config import find_chrome_executable
+
+chrome_path = find_chrome_executable()
+print(f"Chrome found at: {chrome_path}")
+
+# Get all found installations
+all_chrome = find_chrome_executable(return_all=True)
+```
+
+### Create temporary profile
+
+Generate a temp directory path:
+
+```python
+from nodriver.config import temp_profile_dir
+
+temp_dir = temp_profile_dir()
+print(f"Temp profile: {temp_dir}")
+```
+
+### Check if root
+
+```python
+from nodriver.config import is_root
+
+if is_root():
+    print("Running as root, sandbox will be disabled")
+```
+
+### Platform detection
+
+```python
+from nodriver.config import is_posix
+
+if is_posix:
+    print("Running on Unix-like system")
+else:
+    print("Running on Windows")
+```
+
+## Common configurations
+
+### Development setup
+
+```python
+config = Config(
+    headless=False,
+    user_data_dir='./dev-profile',
+    expert=True,
+    browser_args=['--auto-open-devtools-for-tabs']
+)
+```
+
+### Production scraping
+
+```python
+config = Config(
+    headless=True,
+    sandbox=True,
+    browser_args=[
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--disable-software-rasterizer'
+    ]
+)
+```
+
+### Docker environment
+
+```python
+config = Config(
+    headless=True,
+    sandbox=False,  # Required in most Docker setups
+    browser_args=[
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'  # May be needed in constrained environments
+    ]
+)
+```
+
+### With persistent profile
+
+```python
+config = Config(
+    user_data_dir='./persistent-profile',
+    headless=False
+)
+```
+
+### Connect to remote browser
+
+```python
+# On remote machine, start Chrome with:
+# chrome --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0
+
+config = Config(
+    host='192.168.1.100',
+    port=9222
+)
+```
+
+## Best practices
+
+<Accordion title="Use persistent profiles for login sessions">
+  When you need to maintain login state across runs:
+  ```python
+  config = Config(user_data_dir='./saved-profile')
+  ```
+  The first run will be clean, but subsequent runs will have cookies, cache, and local storage preserved.
+</Accordion>
+
+<Accordion title="Disable sandbox only when necessary">
+  The sandbox provides security isolation. Only disable it when:
+  - Running in Docker containers
+  - Running as root (automatically disabled)
+  - Encountering sandbox-related crashes
+</Accordion>
+
+<Accordion title="Start with minimal arguments">
+  Begin with default configuration and add arguments only when needed. Too many arguments can cause conflicts or unexpected behavior.
+</Accordion>
+
+<Accordion title="Test headless mode separately">
+  Some websites behave differently in headless mode. Test both modes to ensure compatibility.
+</Accordion>
+
+<Accordion title="Keep extensions minimal">
+  Each extension increases resource usage and may affect page behavior. Only load necessary extensions.
+</Accordion>
+
+## Troubleshooting
+
+### Browser won't start
+
+```python
+# Try disabling sandbox
+config = Config(sandbox=False)
+```
+
+### Chrome not found
+
+```python
+# Specify path explicitly
+config = Config(
+    browser_executable_path='/path/to/chrome'
+)
+```
+
+### Connection refused
+
+```python
+# Ensure port is free or let it auto-assign
+config = Config(port=None)  # Auto-assign
+```
+
+### Out of memory in Docker
+
+```python
+config = Config(
+    headless=True,
+    sandbox=False,
+    browser_args=[
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote'
+    ]
+)
+```
+
+## Related documentation
+
+- [Browser management](/concepts/browser) - Using the configured browser
+- [Tab management](/concepts/tabs) - Working with browser tabs
+- [Quick start](/quickstart) - Getting started guide

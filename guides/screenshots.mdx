@@ -1,0 +1,487 @@
+---
+title: Screenshots
+description: Capture screenshots of full pages, viewports, and individual elements
+---
+
+Nodriver provides powerful screenshot capabilities for capturing full pages, viewports, and individual elements. This is useful for visual testing, documentation, and debugging.
+
+## Page screenshots
+
+### Basic screenshot
+
+Capture the current viewport:
+
+```python
+import nodriver as uc
+
+browser = await uc.start()
+tab = await browser.get('https://example.com')
+
+# Save screenshot with auto-generated filename
+path = await tab.save_screenshot()
+print(f"Screenshot saved to: {path}")
+```
+
+From tab.py:1373-1433:
+```python
+async def save_screenshot(
+    self,
+    filename: Optional[PathLike] = "auto",
+    format: Optional[str] = "jpeg",
+    full_page: Optional[bool] = False,
+) -> str:
+    """
+    Saves a screenshot of the page.
+    This is not the same as Element.save_screenshot, which saves a 
+    screenshot of a single element only
+    
+    :param filename: uses this as the save path
+    :param format: jpeg or png (defaults to jpeg)
+    :param full_page: when False (default) it captures the current viewport. 
+                      when True, it captures the entire page
+    :return: the path/filename of saved screenshot
+    """
+    import datetime
+    import urllib.parse
+    
+    await self.sleep()  # update the target's url
+    path = None
+    
+    if format.lower() in ["jpg", "jpeg"]:
+        ext = ".jpg"
+        format = "jpeg"
+    elif format.lower() in ["png"]:
+        ext = ".png"
+        format = "png"
+    
+    if not filename or filename == "auto":
+        parsed = urllib.parse.urlparse(self.target.url)
+        parts = parsed.path.split("/")
+        last_part = parts[-1]
+        last_part = last_part.rsplit("?", 1)[0]
+        dt_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        candidate = f"{parsed.hostname}__{last_part}_{dt_str}"
+        path = pathlib.Path(candidate + ext)
+    else:
+        path = pathlib.Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = await self.send(
+        cdp.page.capture_screenshot(
+            format_=format, capture_beyond_viewport=full_page
+        )
+    )
+```
+
+### Custom filename
+
+```python
+# Specify custom filename
+await tab.save_screenshot('my_screenshot.jpg')
+
+# Save to specific directory
+await tab.save_screenshot('screenshots/homepage.png')
+
+# Full path
+from pathlib import Path
+await tab.save_screenshot(Path('/tmp/test.jpg'))
+```
+
+### Full page screenshot
+
+Capture the entire page, including content below the fold:
+
+```python
+# Capture entire page
+await tab.save_screenshot(
+    filename='full_page.jpg',
+    full_page=True
+)
+```
+
+<Note>
+  Full page screenshots may take longer for very long pages and consume more memory.
+</Note>
+
+### PNG vs JPEG format
+
+```python
+# High quality PNG (larger file size)
+await tab.save_screenshot(
+    filename='screenshot.png',
+    format='png'
+)
+
+# Compressed JPEG (smaller file size)  
+await tab.save_screenshot(
+    filename='screenshot.jpg',
+    format='jpeg'  # default
+)
+```
+
+<Tip>
+  Use PNG for screenshots that require transparency or lossless quality. Use JPEG for general purposes to save disk space.
+</Tip>
+
+## Element screenshots
+
+### Capture specific element
+
+Take a screenshot of a single element:
+
+```python
+# Find and screenshot element
+element = await tab.select('.product-card')
+await element.save_screenshot('product.jpg')
+
+# With custom settings
+await element.save_screenshot(
+    filename='element.png',
+    format='png',
+    scale=2  # 2x resolution
+)
+```
+
+From element.py:843-911:
+```python
+async def save_screenshot(
+    self,
+    filename: typing.Optional[PathLike] = "auto",
+    format: typing.Optional[str] = "jpeg",
+    scale: typing.Optional[typing.Union[int, float]] = 1,
+):
+    """
+    Saves a screenshot of this element (only)
+    This is not the same as Tab.save_screenshot, which saves a 
+    "regular" screenshot
+    
+    When the element is hidden, or has no size, or is otherwise not 
+    capturable, a RuntimeError is raised
+    
+    :param filename: uses this as the save path
+    :param format: jpeg or png (defaults to jpeg)
+    :param scale: the scale of the screenshot, eg: 1 = size as is, 
+                  2 = double, 0.5 is half
+    :return: the path/filename of saved screenshot
+    """
+    import base64
+    import datetime
+    import urllib.parse
+    
+    pos = await self.get_position()
+    if not pos:
+        raise RuntimeError(
+            "could not determine position of element. probably because "
+            "it's not in view, or hidden"
+        )
+    viewport = pos.to_viewport(scale)
+    path = None
+    await self.tab.sleep()
+    if not filename or filename == "auto":
+        parsed = urllib.parse.urlparse(self.tab.target.url)
+        parts = parsed.path.split("/")
+        last_part = parts[-1]
+        last_part = last_part.rsplit("?", 1)[0]
+        dt_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        candidate = f"{parsed.hostname}__{last_part}_{dt_str}"
+        ext = ""
+        if format.lower() in ["jpg", "jpeg"]:
+            ext = ".jpg"
+            format = "jpeg"
+        elif format.lower() in ["png"]:
+            ext = ".png"
+            format = "png"
+        path = pathlib.Path(candidate + ext)
+    else:
+        path = pathlib.Path(filename)
+    
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = await self._tab.send(
+        cdp.page.capture_screenshot(
+            format, clip=viewport, capture_beyond_viewport=True
+        )
+    )
+    if not data:
+        from .connection import ProtocolException
+        raise ProtocolException(
+            "could not take screenshot. most possible cause is the page "
+            "has not finished loading yet."
+        )
+    
+    data_bytes = base64.b64decode(data)
+    if not path:
+        raise RuntimeError("invalid filename or path: '%s'" % filename)
+    path.write_bytes(data_bytes)
+    return str(path)
+```
+
+### High-resolution element screenshots
+
+```python
+# 2x resolution (retina)
+element = await tab.select('.logo')
+await element.save_screenshot(
+    filename='logo_2x.png',
+    format='png',
+    scale=2
+)
+
+# 0.5x resolution (thumbnail)
+await element.save_screenshot(
+    filename='logo_thumb.jpg',
+    scale=0.5
+)
+```
+
+### Screenshot multiple elements
+
+```python
+# Screenshot all product cards
+products = await tab.select_all('.product')
+
+for i, product in enumerate(products):
+    await product.save_screenshot(f'product_{i}.jpg')
+```
+
+## Auto-generated filenames
+
+When you use `filename="auto"` or omit the filename parameter, nodriver generates descriptive filenames:
+
+```python
+# Auto-generated filename
+# Format: {hostname}__{path}_{timestamp}.{ext}
+await tab.save_screenshot()  # e.g., "example.com__index_2024-03-01_14-30-45.jpg"
+```
+
+The filename includes:
+- Hostname from the URL
+- Last part of the path
+- Timestamp (YYYY-MM-DD_HH-MM-SS)
+- File extension
+
+## Handling screenshot errors
+
+```python
+from nodriver.core.connection import ProtocolException
+
+try:
+    await tab.save_screenshot('screenshot.jpg')
+except ProtocolException as e:
+    print(f"Screenshot failed: {e}")
+    # Page might not be fully loaded
+    await tab.wait(2)
+    await tab.save_screenshot('screenshot.jpg')
+except RuntimeError as e:
+    print(f"Invalid filename or path: {e}")
+```
+
+<Warning>
+  Screenshots may fail if the page hasn't finished loading. Always wait for the page to be ready before taking screenshots.
+</Warning>
+
+## Real-world example from imgur demo
+
+From imgur_upload_image.py:
+
+```python
+import nodriver as uc
+from pathlib import Path
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://imgur.com')
+    
+    # Create screenshot of another page
+    save_path = Path('screenshot.jpg').resolve()
+    temp_tab = await browser.get(
+        'https://github.com/ultrafunkamsterdam/undetected-chromedriver',
+        new_tab=True
+    )
+    
+    # Wait for page to load
+    await temp_tab
+    
+    # Save screenshot
+    await temp_tab.save_screenshot(save_path)
+    print(f"Screenshot saved to {save_path}")
+    
+    # Close temp tab
+    await temp_tab.close()
+    
+    # Now use the screenshot file...
+    file_input = await tab.select('input[type=file]')
+    await file_input.send_file(save_path)
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+## Screenshot workflow for visual testing
+
+Here's a complete example for visual regression testing:
+
+```python
+import nodriver as uc
+from pathlib import Path
+import hashlib
+
+async def visual_regression_test():
+    browser = await uc.start()
+    screenshots_dir = Path('screenshots')
+    screenshots_dir.mkdir(exist_ok=True)
+    
+    # Pages to test
+    pages = [
+        'https://example.com',
+        'https://example.com/about',
+        'https://example.com/contact'
+    ]
+    
+    for url in pages:
+        tab = await browser.get(url)
+        await tab.wait(2)  # Let page fully load
+        
+        # Generate filename from URL
+        page_name = url.split('/')[-1] or 'home'
+        
+        # Full page screenshot
+        screenshot_path = screenshots_dir / f'{page_name}_full.png'
+        await tab.save_screenshot(
+            filename=str(screenshot_path),
+            format='png',
+            full_page=True
+        )
+        
+        # Calculate hash for comparison
+        with open(screenshot_path, 'rb') as f:
+            file_hash = hashlib.md5(f.read()).hexdigest()
+        print(f"{page_name}: {file_hash}")
+        
+        # Screenshot key elements
+        header = await tab.select('header')
+        if header:
+            await header.save_screenshot(
+                filename=str(screenshots_dir / f'{page_name}_header.png')
+            )
+        
+        footer = await tab.select('footer')
+        if footer:
+            await footer.save_screenshot(
+                filename=str(screenshots_dir / f'{page_name}_footer.png')
+            )
+    
+    print(f"Screenshots saved to {screenshots_dir}")
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(visual_regression_test())
+```
+
+## Screenshot comparison workflow
+
+```python
+from PIL import Image
+import numpy as np
+
+async def compare_screenshots():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Take baseline
+    await tab.save_screenshot('baseline.png')
+    
+    # Make some changes
+    await tab.evaluate('document.body.style.backgroundColor = "red"')
+    
+    # Take comparison
+    await tab.save_screenshot('comparison.png')
+    
+    # Compare using PIL
+    img1 = Image.open('baseline.png')
+    img2 = Image.open('comparison.png')
+    
+    arr1 = np.array(img1)
+    arr2 = np.array(img2)
+    
+    diff = np.abs(arr1 - arr2)
+    is_different = np.any(diff > 0)
+    
+    print(f"Images are different: {is_different}")
+    
+    browser.stop()
+```
+
+## Using CDP for advanced screenshots
+
+For more control, use CDP directly:
+
+```python
+from nodriver import cdp
+import base64
+
+tab = await browser.get('https://example.com')
+
+# Screenshot with custom viewport
+data = await tab.send(
+    cdp.page.capture_screenshot(
+        format_='png',
+        quality=100,
+        clip=cdp.page.Viewport(
+            x=0,
+            y=0,
+            width=1920,
+            height=1080,
+            scale=2
+        ),
+        capture_beyond_viewport=True,
+        from_surface=True
+    )
+)
+
+# Save manually
+with open('custom_screenshot.png', 'wb') as f:
+    f.write(base64.b64decode(data))
+```
+
+## Best practices
+
+<Steps>
+
+### Wait before screenshots
+
+Always wait for the page to be fully loaded:
+
+```python
+await tab.get('https://example.com')
+await tab.wait(1)  # Let JavaScript execute
+await tab.save_screenshot()
+```
+
+### Use PNG for precision
+
+For visual testing and comparisons, use PNG format to avoid JPEG compression artifacts.
+
+### Organize screenshots
+
+Use a consistent directory structure:
+
+```python
+screenshots_dir = Path('screenshots') / datetime.now().strftime('%Y-%m-%d')
+screenshots_dir.mkdir(parents=True, exist_ok=True)
+```
+
+### Handle hidden elements
+
+Scroll elements into view before taking screenshots:
+
+```python
+element = await tab.select('.footer')
+await element.scroll_into_view()
+await tab.wait(0.5)  # Let scroll animation complete
+await element.save_screenshot('footer.jpg')
+```
+
+### Clean up old screenshots
+
+Implement retention policies for screenshot files to avoid filling up disk space.
+
+</Steps>

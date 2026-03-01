@@ -1,0 +1,757 @@
+---
+title: Tab
+description: Control browser tabs, navigate pages, and interact with elements
+icon: window-restore
+---
+
+## Overview
+
+The `Tab` class represents a browser tab (or target) and provides methods for navigation, element interaction, and page manipulation. A tab could be a browser window, an iframe, a service worker, or a background script.
+
+<Note>
+  Tab objects are created by the Browser. Access them via `browser.tabs`, `browser.main_tab`, or by calling `browser.get()`.
+</Note>
+
+## Properties
+
+<ResponseField name="browser" type="Browser">
+  Reference to the parent Browser instance.
+</ResponseField>
+
+<ResponseField name="url" type="str">
+  Current URL of the tab (updated when you `await tab`).
+</ResponseField>
+
+<ResponseField name="target_id" type="str">
+  Unique identifier for this target.
+</ResponseField>
+
+<ResponseField name="type_" type="str">
+  Type of target: "page", "iframe", "worker", etc.
+</ResponseField>
+
+<ResponseField name="frame_id" type="str">
+  Frame identifier for the current page.
+</ResponseField>
+
+<ResponseField name="inspector_url" type="str">
+  URL to open Chrome DevTools inspector for this tab.
+</ResponseField>
+
+## Element Finding Methods
+
+### find()
+
+Find a single element by text content. Retries until timeout if not found.
+
+```python
+async def find(
+    self,
+    text: str,
+    best_match: bool = True,
+    return_enclosing_element: bool = True,
+    timeout: Union[int, float] = 10,
+) -> Element
+```
+
+<ParamField path="text" type="str" required>
+  Text to search for. Script contents are also considered text.
+</ParamField>
+
+<ParamField path="best_match" type="bool" default="True">
+  When True, returns the element with the most similar text length. This helps find specific elements like a "login" button instead of scripts containing "login". When False, returns the first match (faster).
+</ParamField>
+
+<ParamField path="return_enclosing_element" type="bool" default="True">
+  When True, returns the parent element containing the text node. Set to False to get the text node itself.
+</ParamField>
+
+<ParamField path="timeout" type="float | int" default="10">
+  Maximum seconds to wait for the element to appear.
+</ParamField>
+
+**Example:**
+
+```python
+# Find login button
+login_btn = await tab.find('Login')
+await login_btn.click()
+
+# Find with exact first match (faster)
+heading = await tab.find('Welcome', best_match=False)
+```
+
+### select()
+
+Find a single element by CSS selector. Retries until timeout if not found.
+
+```python
+async def select(
+    self,
+    selector: str,
+    timeout: Union[int, float] = 10,
+) -> Element
+```
+
+<ParamField path="selector" type="str" required>
+  CSS selector string (e.g., `a[href]`, `button[class*=close]`, `a > img[src]`).
+</ParamField>
+
+<ParamField path="timeout" type="float | int" default="10">
+  Maximum seconds to wait for the element to appear.
+</ParamField>
+
+**Example:**
+
+```python
+# Find submit button
+submit = await tab.select('button[type="submit"]')
+await submit.click()
+
+# Find link with specific class
+link = await tab.select('a.external-link')
+print(link.attrs.href)
+```
+
+### find_all()
+
+Find multiple elements by text content.
+
+```python
+async def find_all(
+    self,
+    text: str,
+    timeout: Union[int, float] = 10,
+) -> List[Element]
+```
+
+<ParamField path="text" type="str" required>
+  Text to search for.
+</ParamField>
+
+<ParamField path="timeout" type="float | int" default="10">
+  Maximum seconds to wait.
+</ParamField>
+
+**Example:**
+
+```python
+# Find all "Read more" links
+links = await tab.find_all('Read more')
+for link in links:
+    await link.click()
+    await tab.wait(1)
+```
+
+### select_all()
+
+Find multiple elements by CSS selector.
+
+```python
+async def select_all(
+    self, 
+    selector: str, 
+    timeout: Union[int, float] = 10, 
+    include_frames: bool = False
+) -> List[Element]
+```
+
+<ParamField path="selector" type="str" required>
+  CSS selector string.
+</ParamField>
+
+<ParamField path="timeout" type="float | int" default="10">
+  Maximum seconds to wait.
+</ParamField>
+
+<ParamField path="include_frames" type="bool" default="False">
+  Whether to include results from iframes.
+</ParamField>
+
+**Example:**
+
+```python
+# Get all images
+images = await tab.select_all('img')
+for img in images:
+    print(img.attrs.src)
+
+# Get all inputs including those in iframes
+inputs = await tab.select_all('input', include_frames=True)
+```
+
+### xpath()
+
+Find elements by XPath expression.
+
+```python
+async def xpath(
+    self, 
+    xpath: str, 
+    timeout: float = 2.5
+) -> List[Element]
+```
+
+<ParamField path="xpath" type="str" required>
+  XPath expression string.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="2.5">
+  Maximum seconds to wait.
+</ParamField>
+
+**Example:**
+
+```python
+# Find all inline scripts (without src attribute)
+scripts = await tab.xpath('//script[not(@src)]')
+
+# Case-insensitive text search
+elems = await tab.xpath(
+    '//text()[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "test")]'
+)
+```
+
+### query_selector()
+
+Low-level CSS selector query (equivalent to `document.querySelector`).
+
+```python
+async def query_selector(
+    self, 
+    selector: str
+) -> Element
+```
+
+### query_selector_all()
+
+Low-level CSS selector query for multiple elements (equivalent to `document.querySelectorAll`).
+
+```python
+async def query_selector_all(
+    self, 
+    selector: str
+) -> List[Element]
+```
+
+## Navigation Methods
+
+### get()
+
+Navigate to a URL.
+
+```python
+async def get(
+    self, 
+    url: str = "chrome://welcome", 
+    new_tab: bool = False, 
+    new_window: bool = False
+) -> Tab
+```
+
+<ParamField path="url" type="str" default="chrome://welcome">
+  URL to navigate to.
+</ParamField>
+
+<ParamField path="new_tab" type="bool" default="False">
+  Open in a new tab.
+</ParamField>
+
+<ParamField path="new_window" type="bool" default="False">
+  Open in a new window.
+</ParamField>
+
+**Example:**
+
+```python
+# Navigate in current tab
+await tab.get('https://example.com')
+
+# Open in new tab
+new_tab = await tab.get('https://example.org', new_tab=True)
+```
+
+### back()
+
+Navigate back in history.
+
+```python
+async def back(self)
+```
+
+### forward()
+
+Navigate forward in history.
+
+```python
+async def forward(self)
+```
+
+### reload()
+
+Reload the current page.
+
+```python
+async def reload(
+    self,
+    ignore_cache: bool = True,
+    script_to_evaluate_on_load: str = None
+)
+```
+
+<ParamField path="ignore_cache" type="bool" default="True">
+  Whether to bypass the cache.
+</ParamField>
+
+<ParamField path="script_to_evaluate_on_load" type="str" default="None">
+  JavaScript to execute when the page loads.
+</ParamField>
+
+**Example:**
+
+```python
+# Navigate through history
+await tab.get('https://example.com')
+await tab.get('https://example.org')
+await tab.back()  # Back to example.com
+await tab.forward()  # Forward to example.org
+await tab.reload()  # Refresh page
+```
+
+## Page Content Methods
+
+### get_content()
+
+Get the HTML content of the page.
+
+```python
+async def get_content(self) -> str
+```
+
+**Example:**
+
+```python
+html = await tab.get_content()
+print(html)
+```
+
+### evaluate()
+
+Execute JavaScript and get the result.
+
+```python
+async def evaluate(
+    self, 
+    expression: str, 
+    await_promise: bool = False,
+    return_by_value: bool = True,
+    max_depth: int = 2
+)
+```
+
+<ParamField path="expression" type="str" required>
+  JavaScript expression to evaluate.
+</ParamField>
+
+<ParamField path="await_promise" type="bool" default="False">
+  Whether to await the result if it's a Promise.
+</ParamField>
+
+<ParamField path="return_by_value" type="bool" default="True">
+  Return the value directly instead of a remote object reference.
+</ParamField>
+
+**Example:**
+
+```python
+# Get page title
+title = await tab.evaluate('document.title')
+
+# Get multiple values
+data = await tab.evaluate('''
+    ({
+        title: document.title,
+        url: window.location.href,
+        cookies: document.cookie
+    })
+''')
+print(data)
+```
+
+## Window Management
+
+### maximize()
+
+Maximize the window.
+
+```python
+async def maximize(self)
+```
+
+### minimize()
+
+Minimize the window.
+
+```python
+async def minimize(self)
+```
+
+### fullscreen()
+
+Set window to fullscreen.
+
+```python
+async def fullscreen(self)
+```
+
+### set_window_size()
+
+Set window position and size.
+
+```python
+async def set_window_size(
+    self, 
+    left: int = 0, 
+    top: int = 0, 
+    width: int = 1280, 
+    height: int = 1024
+)
+```
+
+**Example:**
+
+```python
+# Set custom window size
+await tab.set_window_size(0, 0, 1920, 1080)
+
+# Maximize window
+await tab.maximize()
+```
+
+### activate()
+
+Bring this tab to the front.
+
+```python
+async def activate(self)
+```
+
+### close()
+
+Close this tab.
+
+```python
+async def close(self)
+```
+
+## Scrolling Methods
+
+### scroll_down()
+
+Scroll down by a specified amount.
+
+```python
+async def scroll_down(self, amount: int = 25)
+```
+
+### scroll_up()
+
+Scroll up by a specified amount.
+
+```python
+async def scroll_up(self, amount: int = 25)
+```
+
+**Example:**
+
+```python
+# Scroll down 100 pixels
+await tab.scroll_down(100)
+
+# Scroll up 50 pixels
+await tab.scroll_up(50)
+```
+
+## Mouse Interaction
+
+### mouse_move()
+
+Move the mouse to specific coordinates.
+
+```python
+async def mouse_move(
+    self, 
+    x: float, 
+    y: float, 
+    steps: int = 10, 
+    flash: bool = False
+)
+```
+
+<ParamField path="x" type="float" required>
+  X coordinate.
+</ParamField>
+
+<ParamField path="y" type="float" required>
+  Y coordinate.
+</ParamField>
+
+<ParamField path="steps" type="int" default="10">
+  Number of steps for smooth movement.
+</ParamField>
+
+<ParamField path="flash" type="bool" default="False">
+  Flash the point for visibility.
+</ParamField>
+
+### mouse_click()
+
+Click at specific coordinates.
+
+```python
+async def mouse_click(
+    self,
+    x: float = None,
+    y: float = None,
+    button: str = 'left',
+    buttons: int = 1,
+    modifiers: int = 0,
+    click_count: int = 1
+)
+```
+
+### mouse_drag()
+
+Drag from one position to another.
+
+```python
+async def mouse_drag(
+    self,
+    from_x: float,
+    from_y: float,
+    to_x: float,
+    to_y: float,
+    steps: int = 20
+)
+```
+
+## Screenshots
+
+### save_screenshot()
+
+Save a screenshot of the page.
+
+```python
+async def save_screenshot(
+    self,
+    filename: str = 'screenshot.png',
+    format: str = 'png',
+    full_page: bool = False
+)
+```
+
+<ParamField path="filename" type="str" default="screenshot.png">
+  Path to save the screenshot.
+</ParamField>
+
+<ParamField path="format" type="str" default="png">
+  Image format: 'png' or 'jpeg'.
+</ParamField>
+
+<ParamField path="full_page" type="bool" default="False">
+  Capture the entire page, not just the viewport.
+</ParamField>
+
+**Example:**
+
+```python
+# Save viewport screenshot
+await tab.save_screenshot('page.png')
+
+# Save full page screenshot
+await tab.save_screenshot('fullpage.png', full_page=True)
+
+# Save as JPEG
+await tab.save_screenshot('page.jpg', format='jpeg')
+```
+
+## File Downloads
+
+### download_file()
+
+Download a file from a URL.
+
+```python
+async def download_file(
+    self, 
+    url: str, 
+    filename: Optional[PathLike] = None
+) -> pathlib.Path
+```
+
+<ParamField path="url" type="str" required>
+  URL of the file to download.
+</ParamField>
+
+<ParamField path="filename" type="PathLike" default="None">
+  Optional filename. If None, uses the filename from the URL.
+</ParamField>
+
+**Example:**
+
+```python
+# Download file
+path = await tab.download_file(
+    'https://example.com/file.pdf',
+    'downloaded.pdf'
+)
+print(f"Downloaded to: {path}")
+```
+
+### set_download_path()
+
+Set the default download directory.
+
+```python
+async def set_download_path(self, path: Union[str, PathLike])
+```
+
+## Storage Methods
+
+### get_local_storage()
+
+Get all localStorage items.
+
+```python
+async def get_local_storage(self) -> dict
+```
+
+### set_local_storage()
+
+Set localStorage items.
+
+```python
+async def set_local_storage(self, items: dict)
+```
+
+**Example:**
+
+```python
+# Set localStorage
+await tab.set_local_storage({
+    'theme': 'dark',
+    'user': 'john'
+})
+
+# Get localStorage
+storage = await tab.get_local_storage()
+print(storage)
+```
+
+## Waiting and Timing
+
+### wait()
+
+Wait for a specified time.
+
+```python
+async def wait(self, t: Union[int, float] = 0.5)
+```
+
+### sleep()
+
+Alias for `wait()`.
+
+```python
+async def sleep(self, t: float | int = 1)
+```
+
+### wait_for()
+
+Wait for a condition to be true.
+
+```python
+async def wait_for(
+    self,
+    condition: Callable,
+    timeout: float = 10
+)
+```
+
+**Example:**
+
+```python
+# Wait 2 seconds
+await tab.wait(2)
+
+# Wait for element to appear
+await tab.wait_for(lambda: tab.select('button#submit', timeout=0.1))
+```
+
+## Inspector
+
+### open_external_inspector()
+
+Open Chrome DevTools inspector in your system browser.
+
+```python
+async def open_external_inspector(self)
+```
+
+**Example:**
+
+```python
+# Open inspector for debugging
+await tab.open_external_inspector()
+```
+
+## Custom CDP Commands
+
+Send custom Chrome DevTools Protocol commands:
+
+```python
+from nodriver import cdp
+
+# Navigate using CDP
+await tab.send(cdp.page.navigate(url='https://example.com'))
+
+# Take screenshot using CDP
+screenshot = await tab.send(cdp.page.capture_screenshot())
+```
+
+## Examples
+
+### Complete scraping example
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Find and click button
+    button = await tab.find('Click me')
+    await button.click()
+    
+    # Wait for content to load
+    await tab.wait(2)
+    
+    # Get all links
+    links = await tab.select_all('a')
+    for link in links:
+        print(f"Link: {link.attrs.href}")
+    
+    # Take screenshot
+    await tab.save_screenshot('result.png')
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## See also
+
+- [Element class](/api/element) - Interact with page elements
+- [Browser class](/api/browser) - Manage browser and tabs
+- [CDP Usage](/api/cdp/usage) - Use Chrome DevTools Protocol

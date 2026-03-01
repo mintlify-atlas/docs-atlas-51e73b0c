@@ -1,0 +1,556 @@
+---
+title: Element
+description: Interact with HTML elements on the page
+icon: code
+---
+
+## Overview
+
+The `Element` class represents an HTML DOM element and provides methods for interaction, property access, and traversal. Elements are returned by Tab methods like `find()`, `select()`, and `query_selector_all()`.
+
+<Note>
+  Elements are created by Tab methods. Don't instantiate Element directly.
+</Note>
+
+## Creation
+
+```python
+# Find element by text
+button = await tab.find('Login')
+
+# Find by CSS selector
+input_field = await tab.select('input[name="email"]')
+
+# Find all elements
+links = await tab.select_all('a')
+```
+
+## Properties
+
+### Node Properties
+
+<ResponseField name="tag" type="str">
+  The HTML tag name in lowercase (e.g., 'div', 'button', 'a').
+</ResponseField>
+
+<ResponseField name="tag_name" type="str">
+  Alias for `tag`.
+</ResponseField>
+
+<ResponseField name="node_id" type="int">
+  Unique node identifier.
+</ResponseField>
+
+<ResponseField name="node_name" type="str">
+  Node name (uppercase tag name).
+</ResponseField>
+
+<ResponseField name="node_type" type="int">
+  Node type number (1 = element, 3 = text, etc.).
+</ResponseField>
+
+<ResponseField name="node_value" type="str">
+  Value of the node (for text nodes).
+</ResponseField>
+
+<ResponseField name="local_name" type="str">
+  Local name of the element.
+</ResponseField>
+
+### Element Relationships
+
+<ResponseField name="parent" type="Element | None">
+  Parent element. Requires calling `await element.update()` first.
+</ResponseField>
+
+<ResponseField name="children" type="List[Element]">
+  List of child elements. Requires calling `await element.update()` first.
+</ResponseField>
+
+<ResponseField name="parent_id" type="int">
+  Node ID of the parent element.
+</ResponseField>
+
+<ResponseField name="child_node_count" type="int">
+  Number of child nodes.
+</ResponseField>
+
+### Attributes
+
+<ResponseField name="attrs" type="ContraDict">
+  Dictionary-like object containing all HTML attributes (href, src, class, id, etc.).
+</ResponseField>
+
+<ResponseField name="attributes" type="List[str]">
+  Raw list of attribute names and values.
+</ResponseField>
+
+### Special Properties
+
+<ResponseField name="tab" type="Tab">
+  Reference to the Tab this element belongs to.
+</ResponseField>
+
+<ResponseField name="tree" type="cdp.dom.Node">
+  The DOM tree structure.
+</ResponseField>
+
+<ResponseField name="shadow_roots" type="List">
+  Shadow root nodes attached to this element.
+</ResponseField>
+
+<ResponseField name="shadow_children" type="List[Element]">
+  Children within shadow DOM.
+</ResponseField>
+
+<ResponseField name="frame_id" type="str">
+  Frame identifier if element is in an iframe.
+</ResponseField>
+
+## Attribute Access
+
+Access HTML attributes directly on the element:
+
+```python
+# Get attributes
+link = await tab.select('a')
+url = link.href  # Get href attribute
+link_class = link.class_  # Get class attribute
+link_id = link.id  # Get id attribute
+
+# Using attrs dictionary
+url = link.attrs.href
+link_class = link.attrs['class']
+
+# Set attributes (will be applied when saving)
+link.href = 'https://newurl.com'
+link['data-value'] = '123'
+```
+
+## Methods
+
+### click()
+
+Click the element.
+
+```python
+async def click(self)
+```
+
+**Example:**
+
+```python
+button = await tab.find('Submit')
+await button.click()
+```
+
+### apply()
+
+Apply JavaScript function to this element.
+
+```python
+async def apply(
+    self, 
+    js_function: str, 
+    return_by_value: bool = True
+)
+```
+
+<ParamField path="js_function" type="str" required>
+  JavaScript function that receives the element as a parameter. Can be an arrow function or function declaration.
+</ParamField>
+
+<ParamField path="return_by_value" type="bool" default="True">
+  Return the value directly instead of a remote object reference.
+</ParamField>
+
+**Example:**
+
+```python
+input_field = await tab.select('input[name="email"]')
+
+# Set value
+await input_field.apply('(elem) => elem.value = "test@example.com"')
+
+# Get value
+value = await input_field.apply('(elem) => elem.value')
+print(value)  # "test@example.com"
+
+# Call method
+await video.apply('elem => elem.play()')
+
+# Multiple operations
+result = await input_field.apply('''
+    (elem) => {
+        elem.value = "hello";
+        elem.focus();
+        return elem.value;
+    }
+''')
+```
+
+### update()
+
+Update element to retrieve latest properties and enable parent/children access.
+
+```python
+async def update(self, _node=None) -> Element
+```
+
+**Example:**
+
+```python
+element = await tab.select('div')
+await element.update()
+
+# Now you can access parent and children
+parent = element.parent
+children = element.children
+```
+
+### get_position()
+
+Get the position and size of the element.
+
+```python
+async def get_position(self, abs: bool = False) -> Position
+```
+
+<ParamField path="abs" type="bool" default="False">
+  Get absolute position on page instead of viewport-relative.
+</ParamField>
+
+**Returns:** Position object with x, y, width, height coordinates.
+
+**Example:**
+
+```python
+element = await tab.select('button')
+pos = await element.get_position()
+print(f"Position: ({pos.x}, {pos.y}), Size: {pos.width}x{pos.height}")
+```
+
+### flash()
+
+Flash the element to highlight it visually.
+
+```python
+async def flash(self, duration: float = 0.5)
+```
+
+<ParamField path="duration" type="float" default="0.5">
+  Duration in seconds to flash.
+</ParamField>
+
+**Example:**
+
+```python
+element = await tab.find('Important')
+await element.flash()  # Highlight for debugging
+```
+
+### scroll_into_view()
+
+Scroll the element into view.
+
+```python
+async def scroll_into_view(self)
+```
+
+**Example:**
+
+```python
+footer = await tab.select('footer')
+await footer.scroll_into_view()
+```
+
+### mouse_move()
+
+Move mouse to this element.
+
+```python
+async def mouse_move(self, steps: int = 10)
+```
+
+<ParamField path="steps" type="int" default="10">
+  Number of steps for smooth movement.
+</ParamField>
+
+**Example:**
+
+```python
+button = await tab.select('button')
+await button.mouse_move()
+```
+
+### mouse_click()
+
+Click on this element using mouse coordinates.
+
+```python
+async def mouse_click(
+    self,
+    button: str = 'left',
+    buttons: int = 1,
+    modifiers: int = 0
+)
+```
+
+### mouse_drag()
+
+Drag this element to a new position.
+
+```python
+async def mouse_drag(
+    self,
+    to_pos: Tuple[float, float],
+    relative: bool = False
+)
+```
+
+<ParamField path="to_pos" type="Tuple[float, float]" required>
+  Target position as (x, y) coordinates.
+</ParamField>
+
+<ParamField path="relative" type="bool" default="False">
+  Whether coordinates are relative to current position.
+</ParamField>
+
+**Example:**
+
+```python
+# Drag element to absolute position
+element = await tab.select('.draggable')
+await element.mouse_drag((500, 300))
+
+# Drag relative to current position
+await element.mouse_drag((100, 50), relative=True)
+```
+
+### save_to_dom()
+
+Save element changes back to the DOM.
+
+```python
+async def save_to_dom(self)
+```
+
+**Example:**
+
+```python
+link = await tab.select('a')
+link.href = 'https://newurl.com'
+await link.save_to_dom()  # Apply changes
+```
+
+### remove_from_dom()
+
+Remove this element from the DOM.
+
+```python
+async def remove_from_dom(self)
+```
+
+**Example:**
+
+```python
+ad = await tab.select('.advertisement')
+await ad.remove_from_dom()  # Remove from page
+```
+
+### get_html()
+
+Get the HTML content of the element.
+
+```python
+async def get_html(self) -> str
+```
+
+**Example:**
+
+```python
+div = await tab.select('div.content')
+html = await div.get_html()
+print(html)
+```
+
+### get_js_attributes()
+
+Get JavaScript properties of the element.
+
+```python
+async def get_js_attributes(self) -> ContraDict
+```
+
+**Example:**
+
+```python
+input_field = await tab.select('input')
+js_attrs = await input_field.get_js_attributes()
+print(js_attrs.value, js_attrs.checked)
+```
+
+### text_all
+
+Get all text content recursively.
+
+```python
+async def text_all(self) -> str
+```
+
+### text
+
+Get immediate text content.
+
+```python
+async def text(self) -> str
+```
+
+**Example:**
+
+```python
+paragraph = await tab.select('p')
+text = await paragraph.text()
+print(text)
+```
+
+## Querying Within Elements
+
+Find child elements within an element:
+
+```python
+# Find children using CSS selectors
+container = await tab.select('div.container')
+buttons = await container.query_selector_all('button')
+
+# Using Tab methods with parent element
+for button in buttons:
+    await button.click()
+```
+
+## Traversing the DOM
+
+```python
+element = await tab.select('div')
+await element.update()  # Required for parent/children access
+
+# Access parent
+parent = element.parent
+print(parent.tag)
+
+# Access children
+for child in element.children:
+    print(child.tag)
+    
+# Access shadow DOM children
+if element.shadow_children:
+    for shadow_child in element.shadow_children:
+        print(shadow_child.tag)
+```
+
+## Shadow DOM
+
+Work with shadow DOM elements:
+
+```python
+# Check if element has shadow root
+element = await tab.select('custom-element')
+if element.shadow_roots:
+    print("Has shadow DOM")
+    
+# Access shadow children
+if element.shadow_children:
+    for child in element.shadow_children:
+        print(child.tag)
+```
+
+## Examples
+
+### Fill and submit a form
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com/login')
+    
+    # Find and fill email field
+    email = await tab.select('input[name="email"]')
+    await email.apply('(e) => e.value = "user@example.com"')
+    
+    # Find and fill password field
+    password = await tab.select('input[type="password"]')
+    await password.apply('(e) => e.value = "secretpass"')
+    
+    # Submit form
+    submit = await tab.find('Login')
+    await submit.click()
+    
+    await tab.wait(3)
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Extract data from elements
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Get all article titles
+    articles = await tab.select_all('article')
+    
+    for article in articles:
+        # Get title
+        title_elem = await article.query_selector('h2')
+        title = await title_elem.text() if title_elem else 'No title'
+        
+        # Get link
+        link_elem = await article.query_selector('a')
+        link = link_elem.attrs.href if link_elem else 'No link'
+        
+        print(f"Title: {title}")
+        print(f"Link: {link}")
+        print('---')
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Interact with dynamic elements
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Find button and scroll into view
+    button = await tab.find('Load More')
+    await button.scroll_into_view()
+    
+    # Flash to highlight (useful for debugging)
+    await button.flash()
+    
+    # Click the button
+    await button.click()
+    
+    # Wait for new content
+    await tab.wait(2)
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## See also
+
+- [Tab class](/api/tab) - Methods for finding elements
+- [CDP Usage](/api/cdp/usage) - Advanced element manipulation

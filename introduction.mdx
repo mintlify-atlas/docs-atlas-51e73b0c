@@ -1,0 +1,167 @@
+---
+title: Introduction to nodriver
+description: Next level async webscraping and browser automation library for Python with an easy interface that just makes sense
+---
+
+## What is nodriver?
+
+nodriver is the official successor of [Undetected-Chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver/), providing a fully asynchronous Python library for browser automation and web scraping. It communicates directly with the browser using the Chrome DevTools Protocol (CDP), eliminating the need for Selenium or ChromeDriver binaries.
+
+<Note>
+  **No more WebDriver, no more Selenium** - Direct communication provides better resistance against web application firewalls (WAFs) with massive performance gains.
+</Note>
+
+## Why nodriver?
+
+What makes nodriver different from other browser automation packages is its optimization to stay undetected by anti-bot solutions, combined with a focus on usability and quick prototyping.
+
+<CardGroup cols={2}>
+  <Card
+    title="Undetectable by design"
+    icon="shield-check"
+  >
+    Optimized to bypass Captcha, Cloudflare, Imperva, hCaptcha, and other anti-bot systems
+  </Card>
+  <Card
+    title="Fully asynchronous"
+    icon="bolt"
+  >
+    Built on async/await for massive performance improvements and granular control
+  </Card>
+  <Card
+    title="No dependencies"
+    icon="circle-minus"
+  >
+    No ChromeDriver binary or Selenium requirement - communicates directly with the browser
+  </Card>
+  <Card
+    title="Quick to start"
+    icon="rocket"
+  >
+    Up and running in 1-2 lines of code with best practice defaults built-in
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Smart element lookup
+
+Find elements by text or CSS selector with intelligent matching:
+
+```python
+# Find by text - matches by closest text length (shortest wins)
+await tab.find("accept all")
+
+# Find all occurrences
+await tab.find_all("sometext")
+
+# CSS selectors with iframe support
+await tab.select("a[class*=something]")
+
+# Get all matching elements
+await tab.select_all("a[href] > div > img")
+
+# XPath support
+await tab.xpath("//button[@type='submit']")
+```
+
+### Automatic cleanup
+
+- Uses a fresh profile on each run
+- Automatically cleans up created files on exit
+- Save and load cookies to skip repetitive login steps
+
+### Advanced capabilities
+
+<AccordionGroup>
+  <Accordion title="Cloudflare verification">
+    Built-in Cloudflare challenge solver with `tab.cf_verify()` - finds and clicks the checkbox automatically (requires opencv-python).
+  </Accordion>
+  
+  <Accordion title="Event handlers">
+    Add custom handlers for any CDP event:
+    ```python
+    tab.add_handler(cdp.network.ResponseReceived, callback)
+    ```
+  </Accordion>
+  
+  <Accordion title="LocalStorage management">
+    Easy access to browser storage:
+    ```python
+    await tab.get_local_storage()
+    await tab.set_local_storage(data)
+    ```
+  </Accordion>
+  
+  <Accordion title="Connection to running browser">
+    Connect to an existing Chrome debug session for debugging and inspection.
+  </Accordion>
+</AccordionGroup>
+
+## Supported browsers
+
+nodriver works with all Chromium-based browsers:
+
+- Chrome
+- Chromium
+- Edge
+- Brave
+
+<Warning>
+  You need a Chromium-based browser installed, preferably in the default location. For headless environments (AWS, Docker, etc.), use Xvfb to emulate a screen or run in headless mode.
+</Warning>
+
+## Quick example
+
+Here's how simple it is to get started:
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    page = await browser.get('https://www.nowsecure.nl')
+    
+    await page.save_screenshot()
+    await page.scroll_down(150)
+    
+    elems = await page.select_all('*[src]')
+    for elem in elems:
+        await elem.flash()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Install nodriver and get your environment ready
+  </Card>
+  <Card
+    title="Quickstart"
+    icon="play"
+    href="/quickstart"
+  >
+    Build your first automation script in minutes
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/start"
+  >
+    Explore the complete API documentation
+  </Card>
+  <Card
+    title="Examples"
+    icon="book"
+    href="/examples/basic-scraping"
+  >
+    Learn from real-world use cases and patterns
+  </Card>
+</CardGroup>

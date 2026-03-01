@@ -1,0 +1,524 @@
+---
+title: Utility Functions
+description: Helper functions for working with nodriver
+icon: toolbox
+---
+
+## Overview
+
+nodriver provides utility functions in the `nodriver.core.util` module and exports commonly used ones at the top level. These functions help with event loops, browser management, DOM traversal, and more.
+
+## Event Loop Functions
+
+### loop()
+
+Create a new asyncio event loop.
+
+```python
+def loop() -> asyncio.AbstractEventLoop
+```
+
+See the [loop() API reference](/api/loop) for details.
+
+**Example:**
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    # Your code here
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## Browser Management
+
+### start()
+
+Launch a browser instance.
+
+```python
+async def start(
+    config: Optional[Config] = None,
+    *,
+    user_data_dir: Optional[PathLike] = None,
+    headless: Optional[bool] = False,
+    browser_executable_path: Optional[PathLike] = None,
+    browser_args: Optional[List[str]] = None,
+    sandbox: Optional[bool] = True,
+    lang: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    expert: Optional[bool] = None,
+    **kwargs: Optional[dict],
+) -> Browser
+```
+
+See the [start() API reference](/api/start) for details.
+
+### get_registered_instances()
+
+Get all active browser instances.
+
+```python
+def get_registered_instances() -> Set[Browser]
+```
+
+**Returns:** Set of all Browser instances that have been started.
+
+**Example:**
+
+```python
+import nodriver as uc
+from nodriver.core import util
+
+browser1 = await uc.start()
+browser2 = await uc.start()
+
+instances = util.get_registered_instances()
+print(f"Active browsers: {len(instances)}")
+
+for browser in instances:
+    browser.stop()
+```
+
+### deconstruct_browser()
+
+Clean up browser instances and temporary profiles.
+
+```python
+def deconstruct_browser(browser: Browser = None)
+```
+
+<ParamField path="browser" type="Browser" default="None">
+  Specific browser to clean up. If None, cleans up all registered instances.
+</ParamField>
+
+**Example:**
+
+```python
+import nodriver as uc
+from nodriver.core import util
+
+browser = await uc.start()
+# Do work...
+
+# Clean up specific browser
+util.deconstruct_browser(browser)
+
+# Or clean up all browsers
+util.deconstruct_browser()
+```
+
+### free_port()
+
+Find an available port for browser debugging.
+
+```python
+def free_port() -> int
+```
+
+**Returns:** Available port number.
+
+**Example:**
+
+```python
+from nodriver.core import util
+
+port = util.free_port()
+print(f"Using port: {port}")
+
+browser = await uc.start(port=port)
+```
+
+## DOM Traversal
+
+### filter_recurse()
+
+Find the first element matching a predicate by recursively traversing the DOM tree.
+
+```python
+def filter_recurse(
+    doc: Union[cdp.dom.Node, Element], 
+    predicate: Callable[[cdp.dom.Node, Element], bool]
+) -> Union[cdp.dom.Node, Element]
+```
+
+<ParamField path="doc" type="cdp.dom.Node | Element" required>
+  Root node to start traversal from.
+</ParamField>
+
+<ParamField path="predicate" type="Callable" required>
+  Function that takes a node and returns True to select it.
+</ParamField>
+
+**Returns:** First node matching the predicate, or None.
+
+**Example:**
+
+```python
+from nodriver.core import util
+from nodriver import cdp
+
+# Get document tree
+doc = await tab.send(cdp.dom.get_document(-1, True))
+
+# Find first button element
+button = util.filter_recurse(
+    doc,
+    lambda node: node.node_name == 'BUTTON'
+)
+```
+
+### filter_recurse_all()
+
+Find all elements matching a predicate by recursively traversing the DOM tree.
+
+```python
+def filter_recurse_all(
+    doc: Union[cdp.dom.Node, Element], 
+    predicate: Callable[[cdp.dom.Node, Element], bool]
+) -> List[Union[cdp.dom.Node, Element]]
+```
+
+<ParamField path="doc" type="cdp.dom.Node | Element" required>
+  Root node to start traversal from.
+</ParamField>
+
+<ParamField path="predicate" type="Callable" required>
+  Function that takes a node and returns True to include it.
+</ParamField>
+
+**Returns:** List of all nodes matching the predicate.
+
+**Example:**
+
+```python
+from nodriver.core import util
+
+# Find all link elements
+links = util.filter_recurse_all(
+    doc,
+    lambda node: node.node_name == 'A'
+)
+
+print(f"Found {len(links)} links")
+```
+
+## Frame Tree Functions
+
+### flatten_frame_tree()
+
+Flatten a hierarchical frame tree into a flat list of frames.
+
+```python
+def flatten_frame_tree(
+    tree: Union[cdp.page.FrameResourceTree, cdp.page.FrameTree]
+) -> Generator[cdp.page.Frame, None, None]
+```
+
+<ParamField path="tree" type="cdp.page.FrameResourceTree | cdp.page.FrameTree" required>
+  Frame tree to flatten.
+</ParamField>
+
+**Yields:** Frame objects from the tree.
+
+**Example:**
+
+```python
+from nodriver.core import util
+from nodriver import cdp
+
+# Get frame tree
+frame_tree = await tab.send(cdp.page.get_frame_tree())
+
+# Flatten to list of frames
+frames = list(util.flatten_frame_tree(frame_tree))
+
+for frame in frames:
+    print(f"Frame: {frame.url}")
+```
+
+### flatten_frame_tree_resources()
+
+Flatten frame tree and yield frame-resource pairs.
+
+```python
+def flatten_frame_tree_resources(
+    tree: cdp.page.FrameResourceTree
+) -> Generator[Tuple[cdp.page.Frame, cdp.page.FrameResource], None, None]
+```
+
+**Yields:** Tuples of (frame, resource) for each resource in the tree.
+
+## Geometry Functions
+
+### circle()
+
+Generate coordinates around a circle for smooth circular motion.
+
+```python
+def circle(
+    x: float, 
+    y: float = None, 
+    radius: int = 10, 
+    num: int = 10, 
+    dir: int = 0
+) -> Generator[Tuple[float, float], None, None]
+```
+
+<ParamField path="x" type="float" required>
+  Center X coordinate.
+</ParamField>
+
+<ParamField path="y" type="float" default="None">
+  Center Y coordinate. If None, uses x value.
+</ParamField>
+
+<ParamField path="radius" type="int" default="10">
+  Circle radius in pixels.
+</ParamField>
+
+<ParamField path="num" type="int" default="10">
+  Number of points to generate (higher = smoother but slower).
+</ParamField>
+
+<ParamField path="dir" type="int" default="0">
+  Direction: 0 for clockwise, 1 for counter-clockwise.
+</ParamField>
+
+**Yields:** (x, y) coordinate tuples around the circle.
+
+**Example:**
+
+```python
+import nodriver as uc
+from nodriver.core import util
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Move window in a circle
+    window_id, bounds = await tab.get_window()
+    center_x, center_y = bounds.left, bounds.top
+    
+    for x, y in util.circle(center_x, center_y, radius=100, num=50):
+        await tab.set_window_size(int(x), int(y))
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## CDP Helper Functions
+
+### cdp_get_module()
+
+Get a CDP module by domain name.
+
+```python
+def cdp_get_module(domain: Union[str, types.ModuleType]) -> types.ModuleType
+```
+
+<ParamField path="domain" type="str | ModuleType" required>
+  Domain name (e.g., 'page', 'network') or module object.
+</ParamField>
+
+**Returns:** CDP domain module.
+
+**Example:**
+
+```python
+from nodriver.core import util
+
+# Get page domain
+page_module = util.cdp_get_module('page')
+
+# Use it
+command = page_module.navigate(url='https://example.com')
+```
+
+## Comparison Functions
+
+### compare_target_info()
+
+Compare two TargetInfo objects and return differences.
+
+```python
+def compare_target_info(
+    info1: cdp.target.TargetInfo, 
+    info2: cdp.target.TargetInfo
+) -> List[Tuple[str, Any, Any]]
+```
+
+**Returns:** List of tuples (field_name, old_value, new_value) for changed fields.
+
+**Example:**
+
+```python
+from nodriver.core import util
+
+changes = util.compare_target_info(old_target, new_target)
+for field, old_val, new_val in changes:
+    print(f"{field}: {old_val} -> {new_val}")
+```
+
+## Advanced Functions
+
+### create_from_undetected_chromedriver()
+
+Create a nodriver Browser from an undetected_chromedriver instance.
+
+```python
+async def create_from_undetected_chromedriver(
+    driver: "undetected_chromedriver.Chrome"
+) -> Browser
+```
+
+<ParamField path="driver" type="undetected_chromedriver.Chrome" required>
+  Running undetected_chromedriver instance.
+</ParamField>
+
+**Returns:** nodriver Browser instance connected to the same browser.
+
+**Example:**
+
+```python
+import undetected_chromedriver as uc_driver
+from nodriver.core import util
+
+# Create undetected_chromedriver instance
+driver = uc_driver.Chrome()
+
+# Convert to nodriver
+browser = await util.create_from_undetected_chromedriver(driver)
+
+# Now use nodriver API
+tab = browser.main_tab
+await tab.get('https://example.com')
+```
+
+### html_from_tree()
+
+Extract HTML from a DOM tree.
+
+```python
+async def html_from_tree(
+    tree: Union[cdp.dom.Node, Element], 
+    target: Tab
+) -> str
+```
+
+<ParamField path="tree" type="cdp.dom.Node | Element" required>
+  DOM tree or element.
+</ParamField>
+
+<ParamField path="target" type="Tab" required>
+  Tab instance for sending CDP commands.
+</ParamField>
+
+**Returns:** HTML string.
+
+### remove_from_tree()
+
+Remove a node from a DOM tree.
+
+```python
+def remove_from_tree(
+    tree: cdp.dom.Node, 
+    node: cdp.dom.Node
+) -> cdp.dom.Node
+```
+
+**Returns:** Modified tree with node removed.
+
+## Examples
+
+### Clean up all browsers on exit
+
+```python
+import nodriver as uc
+from nodriver.core import util
+import atexit
+
+# Register cleanup
+atexit.register(util.deconstruct_browser)
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    # Cleanup happens automatically on exit
+
+uc.loop().run_until_complete(main())
+```
+
+### Find elements with custom logic
+
+```python
+import nodriver as uc
+from nodriver.core import util
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Get document
+    doc = await tab.send(cdp.dom.get_document(-1, True))
+    
+    # Find all elements with specific attribute
+    elements = util.filter_recurse_all(
+        doc,
+        lambda node: (
+            hasattr(node, 'attributes') and 
+            node.attributes and
+            'data-test' in node.attributes
+        )
+    )
+    
+    print(f"Found {len(elements)} test elements")
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Circular window animation
+
+```python
+import nodriver as uc
+from nodriver.core import util
+
+async def animate_window(tab, center_x, center_y):
+    """Move window in circular pattern"""
+    for x, y in util.circle(
+        center_x, 
+        center_y, 
+        radius=150, 
+        num=100,
+        dir=0
+    ):
+        await tab.set_window_size(int(x), int(y))
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Get starting position
+    window_id, bounds = await tab.get_window()
+    
+    # Animate
+    await animate_window(tab, bounds.left, bounds.top)
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## See also
+
+- [start()](/api/start) - Launch a browser
+- [Browser class](/api/browser) - Browser instance management
+- [Element class](/api/element) - DOM element interaction

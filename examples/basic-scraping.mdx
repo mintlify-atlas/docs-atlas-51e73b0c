@@ -1,0 +1,213 @@
+---
+title: Basic web scraping
+description: Learn how to scrape web content with nodriver using text search and CSS selectors
+---
+
+This example demonstrates the fundamentals of web scraping with nodriver, including finding elements, extracting data, and handling interactive content.
+
+## Complete example
+
+Here's a real-world scraping example that searches Google and monitors network requests:
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    
+    tab = browser.main_tab
+    # Add handlers to monitor network activity
+    tab.add_handler(cdp.network.RequestWillBeSent, send_handler)
+    tab.add_handler(cdp.network.ResponseReceived, receive_handler)
+    
+    # Navigate to Google
+    tab = await browser.get("https://www.google.com/?hl=en")
+    
+    # Handle cookie consent
+    reject_btn = await tab.find("reject all", best_match=True)
+    await reject_btn.click()
+    
+    # Find search input and enter query
+    search_inp = await tab.select("textarea")
+    await search_inp.send_keys("undetected nodriver")
+    
+    # Click search button
+    search_btn = await tab.find("google search", True)
+    await search_btn.click()
+    
+    # Scroll to load more results
+    for _ in range(10):
+        await tab.scroll_down(50)
+    
+    await tab
+    await tab.back()
+    
+    # Demonstrate dynamic input
+    search_inp = await tab.select("textarea")
+    
+    for letter in "undetected nodriver":
+        await search_inp.clear_input()
+        await search_inp.send_keys(
+            "undetected nodriver".replace(letter, letter.upper())
+        )
+        await tab.wait(0.1)
+    
+    # Extract all URLs from the page
+    all_urls = await tab.get_all_urls()
+    for u in all_urls:
+        print("downloading %s" % u)
+        await tab.download_file(u)
+    
+    await tab.sleep(10)
+
+
+async def receive_handler(event: cdp.network.ResponseReceived):
+    print(event.response)
+
+
+async def send_handler(event: cdp.network.RequestWillBeSent):
+    r = event.request
+    s = f"{r.method} {r.url}"
+    for k, v in r.headers.items():
+        s += f"\n\t{k} : {v}"
+    print(s)
+
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Step-by-step breakdown
+
+<Steps>
+  <Step title="Start the browser">
+    Initialize nodriver and create a browser instance:
+    
+    ```python
+    browser = await uc.start()
+    tab = browser.main_tab
+    ```
+  </Step>
+
+  <Step title="Add network handlers">
+    Monitor network activity by adding event handlers:
+    
+    ```python
+    tab.add_handler(cdp.network.RequestWillBeSent, send_handler)
+    tab.add_handler(cdp.network.ResponseReceived, receive_handler)
+    ```
+    
+    These handlers will be called automatically for every network request and response.
+  </Step>
+
+  <Step title="Find elements by text">
+    Use `find()` with `best_match=True` to locate elements by their text content:
+    
+    ```python
+    reject_btn = await tab.find("reject all", best_match=True)
+    await reject_btn.click()
+    ```
+    
+    The `best_match` flag picks the element with the most similar text length, filtering out irrelevant matches.
+  </Step>
+
+  <Step title="Use CSS selectors">
+    Find elements using standard CSS selectors:
+    
+    ```python
+    search_inp = await tab.select("textarea")
+    await search_inp.send_keys("undetected nodriver")
+    ```
+  </Step>
+
+  <Step title="Extract data">
+    Get all URLs from the current page:
+    
+    ```python
+    all_urls = await tab.get_all_urls()
+    for url in all_urls:
+        print(f"Found: {url}")
+    ```
+  </Step>
+</Steps>
+
+## Key methods
+
+### Finding elements
+
+<CodeGroup>
+```python By text content
+# Find by text (waits up to 10 seconds by default)
+element = await tab.find("login")
+
+# Find best match by text length
+element = await tab.find("login", best_match=True)
+```
+
+```python By CSS selector
+# Find single element
+element = await tab.select("input[type=email]")
+
+# Find multiple elements
+elements = await tab.select_all("span")
+```
+</CodeGroup>
+
+### Interacting with elements
+
+```python
+# Click an element
+await element.click()
+
+# Send text input
+await element.send_keys("your text here")
+
+# Clear input field
+await element.clear_input()
+
+# Scroll element into view
+await element.scroll_into_view()
+```
+
+### Page navigation
+
+```python
+# Navigate to URL
+await tab.get("https://example.com")
+
+# Navigate back
+await tab.back()
+
+# Scroll the page
+await tab.scroll_down(100)
+await tab.scroll_up(50)
+```
+
+<Note>
+  The `await tab` statement updates all references and allows the script to "breathe", which is useful when the script runs faster than the browser can render.
+</Note>
+
+## Network monitoring
+
+You can monitor all network requests and responses:
+
+```python
+async def send_handler(event: cdp.network.RequestWillBeSent):
+    request = event.request
+    print(f"{request.method} {request.url}")
+    for key, value in request.headers.items():
+        print(f"  {key}: {value}")
+
+async def receive_handler(event: cdp.network.ResponseReceived):
+    response = event.response
+    print(f"Received: {response.url} - Status: {response.status}")
+
+# Attach handlers before navigation
+tab.add_handler(cdp.network.RequestWillBeSent, send_handler)
+tab.add_handler(cdp.network.ResponseReceived, receive_handler)
+```
+
+<Warning>
+  Always use `await tab.find()` or `await tab.select()` instead of hardcoded sleeps. These methods automatically retry for up to 10 seconds, making your scripts more robust.
+</Warning>

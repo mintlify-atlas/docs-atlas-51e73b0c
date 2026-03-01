@@ -1,0 +1,474 @@
+---
+title: Bypassing detection
+description: Understand nodriver's built-in anti-detection features and stealth capabilities
+---
+
+Nodriver is specifically designed to be undetectable by anti-bot systems. Unlike other browser automation tools, it operates with built-in stealth features that make it indistinguishable from a regular Chrome browser.
+
+## How nodriver avoids detection
+
+Nodriver works differently from traditional automation tools like Selenium:
+
+<Steps>
+
+### No automation flags
+
+Nodriver doesn't use Chrome's `--enable-automation` flag, which is a dead giveaway for bot detection systems.
+
+### Clean JavaScript environment
+
+The browser's JavaScript environment doesn't contain telltale automation properties like `window.navigator.webdriver`.
+
+### Native CDP communication
+
+By using Chrome DevTools Protocol directly instead of WebDriver, nodriver leaves no automation traces in the browser.
+
+### No modified Chrome binaries
+
+Nodriver uses the standard Chrome/Chromium browser without modifications, making it identical to a regular user's browser.
+
+</Steps>
+
+## Automatic stealth features
+
+Nodriver applies stealth techniques automatically when you use `headless=True`:
+
+From tab.py:203-222:
+```python
+async def _prepare_headless(self):
+    if getattr(self, "_prep_headless_done", None):
+        return
+    resp = await self._send_oneshot(
+        cdp.runtime.evaluate(
+            expression="navigator.userAgent",
+        )
+    )
+    if not resp:
+        return
+    response, error = resp
+    if response and response.value:
+        ua = response.value
+        # Remove "Headless" from user agent
+        await self._send_oneshot(
+            cdp.network.set_user_agent_override(
+                user_agent=ua.replace("Headless", ""),
+            )
+        )
+    setattr(self, "_prep_headless_done", True)
+```
+
+### User agent cleaning
+
+Nodriver automatically removes the "Headless" string from the user agent when running in headless mode.
+
+## Running in headless mode
+
+Headless mode allows you to run without a visible browser window:
+
+```python
+import nodriver as uc
+
+# Start in headless mode
+browser = await uc.start(headless=True)
+tab = await browser.get('https://example.com')
+
+# The site won't detect headless mode
+```
+
+<Note>
+  Even in headless mode, nodriver removes detection indicators automatically.
+</Note>
+
+## Expert mode for advanced stealth
+
+Use expert mode for additional anti-detection features:
+
+```python
+from nodriver import Config
+
+# Create config with expert mode
+config = Config(expert=True)
+browser = await uc.start(config=config)
+```
+
+From config.py:68-70:
+```python
+:param expert: when set to True, enabled "expert" mode.
+       This conveys, the inclusion of parameters: --disable-site-isolation-trials,
+       as well as some scripts and patching useful for debugging
+```
+
+From tab.py:224-241:
+```python
+async def _prepare_expert(self):
+    if getattr(self, "_prep_expert_done", None):
+        return
+    if self.browser:
+        await self._send_oneshot(cdp.page.enable())
+        await self._send_oneshot(
+            cdp.page.add_script_to_evaluate_on_new_document(
+                """
+                console.log("hooking attachShadow");
+                Element.prototype._attachShadow = Element.prototype.attachShadow;
+                Element.prototype.attachShadow = function () {
+                    console.log('calling hooked attachShadow')
+                    return this._attachShadow( { mode: "open" } );
+                };"""
+            )
+        )
+    setattr(self, "_prep_expert_done", True)
+```
+
+Expert mode:
+- Disables site isolation trials
+- Forces shadow DOM to always be in "open" mode
+- Adds debugging capabilities
+
+## Custom user agent
+
+Override the user agent if needed:
+
+```python
+from nodriver import cdp
+
+browser = await uc.start()
+tab = browser.main_tab
+
+# Set custom user agent
+await tab.send(
+    cdp.network.set_user_agent_override(
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    )
+)
+
+# Navigate with new user agent
+await tab.get('https://example.com')
+```
+
+## Realistic timing and behavior
+
+Make your automation more human-like:
+
+```python
+import random
+
+async def human_like_typing(element, text):
+    """Type with random delays like a human"""
+    for char in text:
+        await element.send_keys(char)
+        # Random delay between 50-150ms
+        await tab.wait(random.uniform(0.05, 0.15))
+
+async def human_like_mouse_move(element):
+    """Move mouse naturally before clicking"""
+    # Hover first
+    await element.mouse_move()
+    await tab.wait(random.uniform(0.1, 0.3))
+    # Then click
+    await element.click()
+```
+
+## Using custom Chrome profile
+
+Use a real user profile to maintain cookies and browsing history:
+
+```python
+from pathlib import Path
+from nodriver import Config
+
+# Use existing Chrome profile
+profile_path = Path.home() / '.config' / 'google-chrome' / 'Default'
+
+config = Config(
+    user_data_dir=str(profile_path),
+    headless=False
+)
+
+browser = await uc.start(config=config)
+```
+
+<Warning>
+  Don't use your main Chrome profile while Chrome is running. Create a separate profile for automation.
+</Warning>
+
+## Handling CAPTCHAs
+
+Nodriver can often bypass bot detection that triggers CAPTCHAs:
+
+```python
+browser = await uc.start()
+tab = await browser.get('https://site-with-protection.com')
+
+# Many sites won't show CAPTCHA at all
+# If CAPTCHA appears, you may need manual solving
+try:
+    content = await tab.select('.protected-content', timeout=5)
+    print('No CAPTCHA detected!')
+except:
+    print('CAPTCHA detected, may need manual intervention')
+    await tab.wait(30)  # Wait for manual solving
+```
+
+## Dealing with Cloudflare
+
+Nodriver often passes Cloudflare checks automatically:
+
+```python
+async def bypass_cloudflare():
+    browser = await uc.start()
+    tab = await browser.get('https://site-with-cloudflare.com')
+    
+    # Wait for Cloudflare check
+    await tab.wait(5)
+    
+    # Check if we're past the challenge
+    try:
+        challenge = await tab.find('checking your browser', timeout=2)
+        if challenge:
+            print('Waiting for Cloudflare check...')
+            await tab.wait(10)
+    except:
+        print('No Cloudflare challenge detected')
+    
+    # Continue with normal automation
+    content = await tab.get_content()
+    return content
+```
+
+## Fingerprint resistance
+
+### Canvas fingerprinting
+
+Add noise to canvas fingerprinting:
+
+```python
+script = """
+(() => {
+    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function() {
+        // Add slight randomness to canvas output
+        const context = this.getContext('2d');
+        if (context) {
+            const imageData = context.getImageData(0, 0, this.width, this.height);
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                imageData.data[i] += Math.floor(Math.random() * 3) - 1;
+            }
+            context.putImageData(imageData, 0, 0);
+        }
+        return originalToDataURL.apply(this, arguments);
+    };
+})();
+"""
+
+await tab.send(
+    cdp.page.add_script_to_evaluate_on_new_document(script)
+)
+```
+
+### WebGL fingerprinting
+
+Obfuscate WebGL parameters:
+
+```python
+script = """
+(() => {
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) {  // UNMASKED_VENDOR_WEBGL
+            return 'Intel Inc.';
+        }
+        if (parameter === 37446) {  // UNMASKED_RENDERER_WEBGL
+            return 'Intel Iris OpenGL Engine';
+        }
+        return getParameter.apply(this, arguments);
+    };
+})();
+"""
+
+await tab.send(
+    cdp.page.add_script_to_evaluate_on_new_document(script)
+)
+```
+
+## Proxy usage for IP rotation
+
+Use browser contexts with different proxies:
+
+```python
+# Create context with proxy
+context1 = await browser.create_context(
+    url='https://example.com',
+    proxy_server='http://proxy1.example.com:8080',
+    new_window=True
+)
+
+# Create another context with different proxy
+context2 = await browser.create_context(
+    url='https://example.com',
+    proxy_server='http://proxy2.example.com:8080',
+    new_window=True
+)
+
+# Each has different IP address
+ip1 = await context1.evaluate('fetch("https://api.ipify.org").then(r => r.text())', await_promise=True)
+ip2 = await context2.evaluate('fetch("https://api.ipify.org").then(r => r.text())', await_promise=True)
+
+print(f"Context 1 IP: {ip1}")
+print(f"Context 2 IP: {ip2}")
+```
+
+## Best practices for stealth
+
+<Steps>
+
+### Let nodriver handle detection
+
+Nodriver's built-in features are usually sufficient. Don't over-complicate with additional stealth measures unless needed.
+
+### Use realistic timing
+
+Add random delays between actions:
+
+```python
+import random
+
+# Random wait between actions
+await tab.wait(random.uniform(1, 3))
+```
+
+### Mimic human behavior
+
+Scroll, hover, and move the mouse like a human would:
+
+```python
+# Scroll gradually
+for _ in range(5):
+    await tab.scroll_down(20)
+    await tab.wait(0.5)
+```
+
+### Maintain sessions
+
+Use cookies and localStorage to maintain session state:
+
+```python
+# Save session after first visit
+await browser.cookies.save('session.dat')
+
+# Load in subsequent runs
+await browser.cookies.load('session.dat')
+```
+
+### Rotate user agents
+
+Change user agents between sessions if making many requests:
+
+```python
+user_agents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...',
+    'Mozilla/5.0 (X11; Linux x86_64)...'
+]
+
+import random
+await tab.send(
+    cdp.network.set_user_agent_override(
+        user_agent=random.choice(user_agents)
+    )
+)
+```
+
+</Steps>
+
+## Real-world example
+
+Here's a complete stealth automation example:
+
+```python
+import nodriver as uc
+import random
+from pathlib import Path
+
+async def stealth_scraping():
+    # Start with headless mode
+    browser = await uc.start(
+        headless=True,
+        sandbox=True
+    )
+    
+    # Load previous session if exists
+    session_file = Path('session.dat')
+    if session_file.exists():
+        await browser.cookies.load(session_file)
+    
+    tab = await browser.get('https://protected-site.com')
+    
+    # Wait for potential checks
+    await tab.wait(random.uniform(2, 4))
+    
+    # Scroll like a human
+    for _ in range(3):
+        await tab.scroll_down(random.randint(20, 40))
+        await tab.wait(random.uniform(0.5, 1.5))
+    
+    # Find and interact with elements
+    search_box = await tab.select('input[type=search]')
+    
+    # Type with human-like delays
+    search_term = 'search query'
+    for char in search_term:
+        await search_box.send_keys(char)
+        await tab.wait(random.uniform(0.05, 0.15))
+    
+    # Random pause before submit
+    await tab.wait(random.uniform(0.5, 1.5))
+    
+    submit = await tab.select('button[type=submit]')
+    await submit.click()
+    
+    # Wait for results
+    await tab.wait(random.uniform(2, 4))
+    
+    # Save session for next time
+    await browser.cookies.save(session_file)
+    
+    # Get results
+    results = await tab.select_all('.result')
+    print(f'Found {len(results)} results')
+    
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(stealth_scraping())
+```
+
+## Testing detection
+
+Verify that your automation is undetectable:
+
+```python
+async def test_detection():
+    browser = await uc.start()
+    
+    # Test pages that detect automation
+    test_urls = [
+        'https://bot.sannysoft.com',
+        'https://arh.antoinevastel.com/bots/areyouheadless',
+        'https://nowsecure.nl'
+    ]
+    
+    for url in test_urls:
+        tab = await browser.get(url)
+        await tab.wait(3)
+        
+        # Take screenshot for manual inspection
+        await tab.save_screenshot(f'{url.split("/")[-1]}.png')
+        
+        print(f'Tested: {url}')
+    
+    browser.stop()
+```
+
+<Tip>
+  Run the test detection script periodically to ensure your automation remains undetectable as anti-bot systems evolve.
+</Tip>

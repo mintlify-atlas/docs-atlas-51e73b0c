@@ -1,0 +1,422 @@
+---
+title: Tab management and control
+description: Learn how to manage browser tabs, navigate pages, find elements, and execute JavaScript
+---
+
+The `Tab` class represents a browser tab (or target) and provides the primary interface for interacting with web pages. Each tab maintains its own connection to the Chrome DevTools Protocol.
+
+## Understanding tabs
+
+In nodriver, a "tab" can represent:
+- A browser tab (the most common case)
+- A browser window
+- An iframe
+- A service worker or background process
+
+<Info>
+  When you navigate to a different page in the same tab, the `Tab` object remains the same. Keep references to your tab objects for continued interaction.
+</Info>
+
+## Getting a tab
+
+### From the browser
+
+```python
+import nodriver as uc
+
+browser = await uc.Browser.create()
+tab = await browser.get('https://example.com')
+```
+
+### Access existing tabs
+
+```python
+# Main tab (first opened)
+main = browser.main_tab
+
+# All tabs
+all_tabs = browser.tabs
+
+# By index
+first = browser[0]
+```
+
+## Navigation
+
+### Navigate to a URL
+
+The `get()` method handles navigation with built-in wait logic:
+
+```python
+# Navigate current tab
+await tab.get('https://example.com')
+
+# Open in new tab
+new_tab = await tab.get('https://example.com', new_tab=True)
+
+# Open in new window
+new_window = await tab.get('https://example.com', new_window=True)
+```
+
+<Note>
+  The `get()` method automatically waits for DOM events and handles timing, making it the safest way to navigate.
+</Note>
+
+### History navigation
+
+```python
+# Go back
+await tab.back()
+
+# Go forward
+await tab.forward()
+
+# Reload page
+await tab.reload(ignore_cache=True)
+```
+
+## Finding elements
+
+nodriver provides multiple powerful methods for locating elements on the page.
+
+### Find by text
+
+Find elements containing specific text:
+
+```python
+# Find first element with text (fast)
+element = await tab.find('Login')
+
+# Best match mode (more accurate, slower)
+element = await tab.find('Login', best_match=True)
+
+# Find all elements with text
+elements = await tab.find_all('Login')
+```
+
+<ParamField path="text" type="str" required>
+  The text to search for. Script contents are also considered text.
+</ParamField>
+
+<ParamField path="best_match" type="bool" default="True">
+  When True, returns the element with the most similar text length. This helps find the "Login" button instead of scripts containing "login".
+</ParamField>
+
+<ParamField path="timeout" type="float" default="10">
+  Seconds to wait for the element to appear before returning None.
+</ParamField>
+
+### Find by CSS selector
+
+Use standard CSS selectors:
+
+```python
+# Find single element
+button = await tab.select('button.submit')
+
+# Find multiple elements
+links = await tab.select_all('a[href]')
+
+# Include iframes in search
+all_links = await tab.select_all('a', include_frames=True)
+```
+
+<ParamField path="selector" type="str" required>
+  CSS selector string, e.g., `a[href]`, `button[class*=close]`, `a > img[src]`
+</ParamField>
+
+### Find by XPath
+
+```python
+# Find inline scripts without src attribute
+scripts = await tab.xpath('//script[not(@src)]')
+
+# Case-insensitive text search (personal favorite)
+elements = await tab.xpath(
+    '//text()[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", '
+    '"abcdefghijklmnopqrstuvwxyz"), "test")]'
+)
+```
+
+<ParamField path="xpath" type="str" required>
+  XPath expression to evaluate.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="2.5">
+  Seconds to retry finding elements before returning an empty list.
+</ParamField>
+
+### Wait for elements
+
+Block until an element appears:
+
+```python
+# Wait for selector
+element = await tab.wait_for(selector='button.submit', timeout=10)
+
+# Wait for text
+element = await tab.wait_for(text='Login', timeout=10)
+```
+
+<Warning>
+  If the element doesn't appear within the timeout period, `wait_for()` raises `asyncio.TimeoutError`.
+</Warning>
+
+## Page interaction
+
+### Scrolling
+
+```python
+# Scroll down 25% of page height
+await tab.scroll_down(25)
+
+# Scroll down full page
+await tab.scroll_down(100)
+
+# Scroll up
+await tab.scroll_up(25)
+```
+
+### JavaScript execution
+
+Execute JavaScript in the page context:
+
+```python
+# Simple evaluation
+user_agent = await tab.evaluate('navigator.userAgent')
+
+# With promise
+result = await tab.evaluate(
+    'fetch("https://api.example.com/data").then(r => r.json())',
+    await_promise=True
+)
+
+# Return by value
+value = await tab.evaluate('document.title', return_by_value=True)
+```
+
+<ParamField path="expression" type="str" required>
+  JavaScript expression to evaluate.
+</ParamField>
+
+<ParamField path="await_promise" type="bool" default="False">
+  Wait for the expression to resolve if it returns a Promise.
+</ParamField>
+
+<ParamField path="return_by_value" type="bool" default="False">
+  Return the actual value instead of a RemoteObject reference.
+</ParamField>
+
+### Dump JavaScript objects
+
+Serialize JavaScript objects to Python dictionaries:
+
+```python
+window_props = await tab.js_dumps('window')
+print(window_props['innerWidth'])
+print(window_props['location'])
+```
+
+## Window management
+
+### Get window bounds
+
+```python
+window_id, bounds = await tab.get_window()
+print(f"Window size: {bounds.width}x{bounds.height}")
+```
+
+### Resize and position
+
+```python
+# Set specific size and position
+await tab.set_window_size(left=0, top=0, width=1920, height=1080)
+
+# Maximize
+await tab.maximize()
+
+# Minimize
+await tab.minimize()
+
+# Fullscreen
+await tab.fullscreen()
+
+# Normal (windowed)
+await tab.medimize()
+```
+
+### Activate tab
+
+Bring the tab to the foreground:
+
+```python
+await tab.activate()
+# or
+await tab.bring_to_front()
+```
+
+## Page content
+
+### Get page source
+
+```python
+html = await tab.get_content()
+```
+
+### Take screenshots
+
+```python
+# Full page screenshot
+await tab.save_screenshot('page.png')
+
+# Custom format and scale
+await tab.save_screenshot('page.jpg', format='jpeg', scale=1.5)
+```
+
+## Debugging
+
+### Open DevTools inspector
+
+Open the Chrome DevTools for this tab in your default browser:
+
+```python
+await tab.open_external_inspector()
+```
+
+Get the inspector URL:
+
+```python
+url = tab.inspector_url
+print(f"Debug at: {url}")
+```
+
+## Waiting and timing
+
+### Sleep
+
+Pause execution and allow the browser to update:
+
+```python
+await tab.sleep(1)  # Wait 1 second
+await tab.wait(0.5)  # Alias for sleep
+```
+
+<Info>
+  Using `await tab` or `await tab.sleep()` allows the script to "breathe" and ensures references are up to date. This is crucial when pages are loading or changing.
+</Info>
+
+### Using await on tabs
+
+```python
+await tab  # Updates state and ensures URL is current
+```
+
+## Closing tabs
+
+Close the current tab:
+
+```python
+await tab.close()
+```
+
+## Custom CDP commands
+
+Send raw Chrome DevTools Protocol commands:
+
+```python
+from nodriver import cdp
+
+# Navigate using CDP directly
+frame_id, loader_id = await tab.send(
+    cdp.page.navigate('https://example.com')
+)
+
+# Get cookies
+cookies = await tab.send(cdp.storage.get_cookies())
+```
+
+<Accordion title="Understanding CDP commands">
+  The `cdp` package contains all Chrome DevTools Protocol domains, methods, events, and types. Each CDP method returns a generator that you pass to `tab.send()`.
+</Accordion>
+
+## Advanced features
+
+### Query selector methods
+
+Lower-level element finding (used internally by `find` and `select`):
+
+```python
+# Single element
+element = await tab.query_selector('button.submit')
+
+# Multiple elements
+elements = await tab.query_selector_all('a[href]')
+```
+
+### Mouse control
+
+```python
+# Click at coordinates
+await tab.mouse_click(x=100, y=200)
+
+# Move mouse
+await tab.mouse_move(x=100, y=200)
+
+# Drag from one point to another
+await tab.mouse_drag(
+    start_point=(100, 100),
+    end_point=(200, 200),
+    steps=10
+)
+```
+
+### Flash point
+
+Display a visual indicator at coordinates (useful for debugging):
+
+```python
+await tab.flash_point(x=100, y=200, duration=1)
+```
+
+## Properties
+
+Access tab properties:
+
+```python
+# Target information
+target_id = tab.target_id
+url = tab.target.url
+title = tab.target.title
+
+# Frame ID
+frame_id = tab.frame_id
+
+# Connection status
+is_closed = tab.closed
+```
+
+## Best practices
+
+<Accordion title="Use appropriate finding methods">
+  - Use `find()` with `best_match=True` for user-visible text
+  - Use `select()` for known element structures
+  - Use `xpath()` for complex queries or case-insensitive searches
+</Accordion>
+
+<Accordion title="Always await tab operations">
+  Tab operations are asynchronous. Missing `await` is a common source of bugs.
+</Accordion>
+
+<Accordion title="Let the page breathe">
+  When encountering timing issues or elements not found, add `await tab` or `await tab.sleep()` to allow page rendering to complete.
+</Accordion>
+
+<Accordion title="Handle timeouts gracefully">
+  Finding methods return `None` after timeout. Check return values before using elements.
+</Accordion>
+
+## Related documentation
+
+- [Element interaction](/concepts/elements) - Working with found elements
+- [Browser management](/concepts/browser) - Managing the browser instance
+- [Configuration](/concepts/configuration) - Browser configuration options

@@ -1,0 +1,504 @@
+---
+title: Navigation
+description: Navigate between pages, handle URLs, and manage browser history
+---
+
+Nodriver provides flexible methods for navigating web pages, managing URLs, and controlling browser history.
+
+## Basic navigation
+
+### Opening pages
+
+Use the `get()` method to navigate to a URL:
+
+```python
+import nodriver as uc
+
+browser = await uc.start()
+
+# Navigate to a URL
+tab = await browser.get('https://example.com')
+```
+
+From browser.py:241-283:
+```python
+async def get(
+    self, url="chrome://welcome", new_tab: bool = False, new_window: bool = False
+) -> tab.Tab:
+    """
+    Top level get. Utilizes the first tab to retrieve given url.
+    
+    This function handles waits/sleeps and detects when DOM events fired, 
+    so it's the safest way of navigating.
+    """
+    if new_tab or new_window:
+        # Create new target using the browser session
+        target_id = await self.connection.send(
+            cdp.target.create_target(
+                url, new_window=new_window, enable_begin_frame_control=True
+            )
+        )
+        # Get the connection matching the new target_id
+        connection: tab.Tab = next(
+            filter(
+                lambda item: item.type_ == "page" and item.target_id == target_id,
+                self.targets,
+            )
+        )
+    else:
+        # Use existing tab
+        connection: tab.Tab = next(
+            filter(lambda item: item.type_ == "page", self.targets)
+        )
+        # Navigate to new URL
+        frame_id, loader_id, *_ = await connection.send(cdp.page.navigate(url))
+        connection.frame_id = frame_id
+```
+
+### Opening new tabs
+
+```python
+# Open URL in new tab
+tab2 = await browser.get('https://github.com', new_tab=True)
+
+# Or from an existing tab
+tab3 = await tab.get('https://google.com', new_tab=True)
+```
+
+### Opening new windows
+
+```python
+# Open URL in new window
+window = await browser.get('https://example.com', new_window=True)
+```
+
+<Note>
+  When you use `new_window=True`, it automatically implies `new_tab=True`.
+</Note>
+
+## Managing tabs
+
+### Getting current tabs
+
+```python
+# Get all tabs
+all_tabs = browser.tabs
+
+# Get main tab (first opened)
+main = browser.main_tab
+
+# Access tabs by index
+first_tab = browser[0]
+second_tab = browser[1]
+
+# Get tab containing specific text
+google_tab = browser['google']
+```
+
+### Iterating over tabs
+
+```python
+# Iterate through all tabs
+for tab in browser:
+    print(tab.url)
+    await tab.activate()
+
+# Use slice notation
+tabs_subset = browser[0:3]  # First 3 tabs
+```
+
+### Closing tabs
+
+```python
+# Close a specific tab
+await tab.close()
+
+# Close all except main
+for tab in browser.tabs:
+    if tab != browser.main_tab:
+        await tab.close()
+```
+
+From the demo.py example:
+```python
+for i, tab in enumerate(driver):
+    try:
+        await tab.get('https://www.google.com')
+        await tab.activate()
+        # Skip first tab
+        if tab == driver.main_tab:
+            print('skipping main tab')
+            continue
+    except:
+        pass
+    await tab.close()
+```
+
+## Browser history
+
+### Navigate back and forward
+
+```python
+# Go back
+await tab.back()
+
+# Go forward  
+await tab.forward()
+```
+
+From tab.py:778-788:
+```python
+async def back(self):
+    """history back"""
+    await self.send(cdp.runtime.evaluate("window.history.back()"))
+
+async def forward(self):
+    """history forward"""
+    await self.send(cdp.runtime.evaluate("window.history.forward()"))
+```
+
+### Reload page
+
+```python
+# Reload with cache
+await tab.reload()
+
+# Reload ignoring cache
+await tab.reload(ignore_cache=True)
+
+# Reload with custom script
+await tab.reload(
+    ignore_cache=True,
+    script_to_evaluate_on_load='console.log("Page reloaded")'
+)
+```
+
+## Getting page information
+
+### Current URL
+
+```python
+# Get current URL
+current_url = tab.url
+print(f"Current page: {current_url}")
+
+# URL is automatically updated when you await the tab
+await tab
+print(f"Updated URL: {tab.url}")
+```
+
+<Tip>
+  Always `await tab` after navigation to ensure the URL property is up-to-date.
+</Tip>
+
+### Page source
+
+Get the current HTML content:
+
+```python
+html_content = await tab.get_content()
+print(html_content)
+```
+
+From tab.py:1047-1056:
+```python
+async def get_content(self):
+    """
+    Gets the current page source content (html)
+    """
+    doc: cdp.dom.Node = await self.send(cdp.dom.get_document(-1, True))
+    return await self.send(
+        cdp.dom.get_outer_html(backend_node_id=doc.backend_node_id)
+    )
+```
+
+### Extract all URLs
+
+```python
+# Get all URLs from links, images, scripts, etc.
+all_urls = await tab.get_all_urls(absolute=True)
+
+for url in all_urls:
+    print(url)
+```
+
+## Waiting strategies
+
+### Simple wait
+
+```python
+# Wait for 2 seconds
+await tab.wait(2)
+
+# Or use sleep (alias)
+await tab.sleep(2)
+```
+
+### Wait for element
+
+Both `select()` and `find()` have built-in waiting:
+
+```python
+# Waits up to 10 seconds for element to appear
+element = await tab.select('.dynamic-content', timeout=10)
+
+# Custom timeout
+element = await tab.find('Loading complete', timeout=30)
+```
+
+### Wait for specific element
+
+Use `wait_for()` for explicit waiting:
+
+```python
+# Wait for selector
+element = await tab.wait_for(selector='button.submit', timeout=15)
+
+# Wait for text
+element = await tab.wait_for(text='Welcome', timeout=10)
+```
+
+From tab.py:1265-1311:
+```python
+async def wait_for(
+    self,
+    selector: Optional[str] = "",
+    text: Optional[str] = "",
+    timeout: Optional[Union[int, float]] = 10,
+) -> element.Element:
+    """
+    Variant on query_selector_all and find_elements_by_text.
+    This variant takes either selector or text, and will block until
+    the requested element(s) are found.
+    
+    It will block for a maximum of <timeout> seconds, after which
+    a TimeoutError will be raised.
+    """
+```
+
+### Awaiting the tab
+
+Calling `await tab` is important for synchronization:
+
+```python
+await tab.get('https://example.com')
+await tab  # Ensures everything is up-to-date
+```
+
+<Note>
+  The `await tab` pattern updates the target URL and allows the script to "breathe", which helps prevent race conditions.
+</Note>
+
+## Window management
+
+### Activate tab
+
+Bring a tab to the foreground:
+
+```python
+await tab.activate()
+
+# Or use the alias
+await tab.bring_to_front()
+```
+
+### Window size and position
+
+```python
+# Set window size and position
+await tab.set_window_size(
+    left=0,
+    top=0, 
+    width=1280,
+    height=1024
+)
+
+# Get current window bounds
+window_id, bounds = await tab.get_window()
+print(f"Window size: {bounds.width}x{bounds.height}")
+```
+
+### Window states
+
+```python
+# Maximize
+await tab.maximize()
+
+# Minimize
+await tab.minimize()
+
+# Fullscreen
+await tab.fullscreen()
+
+# Normal (restore)
+await tab.medimize()
+```
+
+### Tile windows
+
+Arrange multiple windows in a grid:
+
+```python
+# Tile all browser windows
+grid = await browser.tile_windows(max_columns=3)
+
+# Tile specific tabs
+grid = await browser.tile_windows(windows=[tab1, tab2, tab3])
+```
+
+From demo.py:
+```python
+# Open multiple windows
+for _ in range(NUM_WINS):
+    if _ % 2 == 0:
+        await driver.get(URL1, new_window=True)
+    else:
+        await driver.get(URL2, new_window=True)
+
+# Arrange in grid
+grid = await driver.tile_windows(max_columns=NUM_WINS)
+```
+
+## Scrolling
+
+### Scroll down and up
+
+```python
+# Scroll down 50% of viewport
+await tab.scroll_down(50)
+
+# Scroll up 25% of viewport  
+await tab.scroll_up(25)
+
+# Scroll down full page (100%)
+await tab.scroll_down(100)
+```
+
+From tab.py:1170-1220:
+```python
+async def scroll_down(self, amount=25):
+    """
+    Scrolls down maybe
+    
+    :param amount: number in percentage. 25 is a quarter of page, 
+                   50 half, and 1000 is 10x the page
+    """
+    window_id: cdp.browser.WindowID
+    bounds: cdp.browser.Bounds
+    (window_id, bounds) = await self.get_window()
+    
+    await self.send(
+        cdp.input_.synthesize_scroll_gesture(
+            x=0,
+            y=0,
+            y_distance=-(bounds.height * (amount / 100)),
+            y_overscroll=0,
+            x_overscroll=0,
+            prevent_fling=True,
+            repeat_delay_ms=0,
+            speed=7777,
+        )
+    )
+```
+
+## Real-world example
+
+Here's a complete navigation workflow:
+
+```python
+import nodriver as uc
+
+async def navigate_workflow():
+    browser = await uc.start()
+    
+    # Open main page
+    tab = await browser.get('https://example.com')
+    await tab
+    
+    # Click link to navigate
+    link = await tab.find('Read more')
+    await link.click()
+    await tab  # Wait for navigation
+    
+    # Check URL changed
+    print(f"Now at: {tab.url}")
+    
+    # Go back
+    await tab.back()
+    await tab
+    
+    # Open new tab with search
+    search_tab = await browser.get('https://google.com', new_tab=True)
+    await search_tab
+    
+    # Switch between tabs
+    await tab.activate()
+    await tab.wait(1)
+    
+    await search_tab.activate()
+    await search_tab.wait(1)
+    
+    # Close search tab
+    await search_tab.close()
+    
+    # Maximize main tab
+    await tab.maximize()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(navigate_workflow())
+```
+
+## Browser contexts (proxy support)
+
+Create isolated browser contexts with separate proxies:
+
+```python
+# Create context with proxy
+context_tab = await browser.create_context(
+    url='https://example.com',
+    new_window=True,
+    proxy_server='http://user:pass@proxy.example.com:8080'
+)
+
+# Or with SOCKS5
+context_tab = await browser.create_context(
+    url='https://example.com',
+    proxy_server='socks5://user:pass@proxy.example.com:1080'
+)
+```
+
+<Warning>
+  Browser contexts are experimental. Each context creates a separate browsing session with its own cookies, storage, and proxy settings.
+</Warning>
+
+## Best practices
+
+<Steps>
+
+### Always await tab after navigation
+
+Ensure the URL and page state are synchronized.
+
+```python
+await tab.get('https://example.com')
+await tab  # Important!
+```
+
+### Use get() for navigation
+
+Prefer `tab.get()` over direct CDP commands as it handles timing and events.
+
+### Handle navigation delays
+
+Add small delays after navigation to allow JavaScript to execute:
+
+```python
+await tab.get('https://spa-site.com')
+await tab.wait(1)  # Let SPA initialize
+```
+
+### Manage multiple tabs carefully
+
+Always keep a reference to tabs you want to use later, as tab indices can change.
+
+</Steps>

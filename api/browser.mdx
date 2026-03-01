@@ -1,0 +1,383 @@
+---
+title: Browser
+description: The root browser instance that manages tabs and processes
+icon: browser
+---
+
+## Overview
+
+The `Browser` class represents the root browser process and manages all tabs, windows, and resources. There should typically be only one Browser instance per process.
+
+<Note>
+  Create a Browser instance using `await Browser.create()` or the `start()` function, not by calling `Browser()` directly.
+</Note>
+
+## Creation
+
+```python
+import nodriver as uc
+
+# Recommended: Use start() function
+browser = await uc.start()
+
+# Alternative: Use Browser.create()
+from nodriver import Browser, Config
+
+config = Config(headless=True)
+browser = await Browser.create(config)
+```
+
+## Properties
+
+<ResponseField name="config" type="Config">
+  The configuration object used to launch the browser.
+</ResponseField>
+
+<ResponseField name="connection" type="Connection">
+  The websocket connection to the browser.
+</ResponseField>
+
+<ResponseField name="targets" type="List[Tab]">
+  All current targets including tabs, iframes, workers, and background processes.
+</ResponseField>
+
+<ResponseField name="tabs" type="List[Tab]">
+  Only the targets that are of type "page" (actual browser tabs).
+</ResponseField>
+
+<ResponseField name="main_tab" type="Tab">
+  The first tab that was launched with the browser.
+</ResponseField>
+
+<ResponseField name="stopped" type="bool">
+  Whether the browser process has stopped.
+</ResponseField>
+
+<ResponseField name="cookies" type="CookieJar">
+  Cookie management interface for the browser.
+</ResponseField>
+
+<ResponseField name="websocket_url" type="str">
+  The WebSocket debugger URL for the browser.
+</ResponseField>
+
+## Methods
+
+### create()
+
+Create a new Browser instance.
+
+```python
+@classmethod
+async def create(
+    cls,
+    config: Config = None,
+    *,
+    user_data_dir: PathLike = None,
+    headless: bool = False,
+    browser_executable_path: PathLike = None,
+    browser_args: List[str] = None,
+    sandbox: bool = True,
+    host: str = None,
+    port: int = None,
+    **kwargs,
+) -> Browser
+```
+
+<ParamField path="config" type="Config" default="None">
+  Configuration object. If not provided, a new Config is created from the other parameters.
+</ParamField>
+
+See [start()](/api/start) for details on other parameters.
+
+### get()
+
+Navigate to a URL using the first available tab, or create a new tab/window.
+
+```python
+async def get(
+    self, 
+    url: str = "chrome://welcome", 
+    new_tab: bool = False, 
+    new_window: bool = False
+) -> Tab
+```
+
+<ParamField path="url" type="str" default="chrome://welcome">
+  The URL to navigate to.
+</ParamField>
+
+<ParamField path="new_tab" type="bool" default="False">
+  Open URL in a new tab.
+</ParamField>
+
+<ParamField path="new_window" type="bool" default="False">
+  Open URL in a new window.
+</ParamField>
+
+**Returns:** The Tab instance.
+
+**Example:**
+
+```python
+browser = await uc.start()
+
+# Navigate in existing tab
+tab = await browser.get('https://example.com')
+
+# Open in new tab
+tab2 = await browser.get('https://example.org', new_tab=True)
+
+# Open in new window
+tab3 = await browser.get('https://example.net', new_window=True)
+```
+
+### wait()
+
+Wait for a specified time while updating targets.
+
+```python
+async def wait(self, time: Union[float, int] = 0.1)
+```
+
+<ParamField path="time" type="float | int" default="0.1">
+  Time to wait in seconds.
+</ParamField>
+
+**Example:**
+
+```python
+await browser.wait(2)  # Wait for 2 seconds
+```
+
+### sleep()
+
+Alias for `wait()`. Wait for a specified time.
+
+```python
+await browser.sleep(1.5)  # Wait for 1.5 seconds
+```
+
+### stop()
+
+Stop the browser process.
+
+```python
+def stop(self)
+```
+
+**Example:**
+
+```python
+browser = await uc.start()
+tab = await browser.get('https://example.com')
+browser.stop()  # Clean shutdown
+```
+
+### grant_all_permissions()
+
+Grant all possible permissions to the browser.
+
+```python
+async def grant_all_permissions(self)
+```
+
+Grants permissions for:
+- accessibilityEvents
+- audioCapture
+- backgroundSync
+- clipboardReadWrite
+- displayCapture
+- geolocation
+- notifications
+- videoCapture
+- And many more...
+
+**Example:**
+
+```python
+browser = await uc.start()
+await browser.grant_all_permissions()
+```
+
+### tile_windows()
+
+Arrange browser windows in a grid layout.
+
+```python
+async def tile_windows(
+    self, 
+    windows=None, 
+    max_columns: int = 0
+) -> List[Tuple[int, int, int, int]]
+```
+
+<ParamField path="windows" type="List[Tab]" default="None">
+  Specific windows to tile. If None, tiles all tabs.
+</ParamField>
+
+<ParamField path="max_columns" type="int" default="0">
+  Maximum number of columns. If 0, automatically calculated.
+</ParamField>
+
+**Returns:** List of window positions as (left, top, width, height) tuples.
+
+**Example:**
+
+```python
+browser = await uc.start()
+
+# Open multiple tabs
+for url in ['https://example.com', 'https://example.org']:
+    await browser.get(url, new_window=True)
+
+# Arrange them in a grid
+positions = await browser.tile_windows()
+```
+
+### create_context()
+
+Create a new browser context, useful for managing multiple sessions with different proxies.
+
+```python
+async def create_context(
+    self,
+    url: str = "chrome://welcome",
+    new_tab: bool = False,
+    new_window: bool = True,
+    dispose_on_detach: bool = True,
+    proxy_server: str = None,
+    proxy_bypass_list: List[str] = None,
+    origins_with_universal_network_access: List[str] = None,
+    proxy_ssl_context = None,
+) -> Tab
+```
+
+<ParamField path="url" type="str" default="chrome://welcome">
+  Initial URL to navigate to.
+</ParamField>
+
+<ParamField path="proxy_server" type="str" default="None">
+  Proxy server URL. Supports http, https, and socks5 with authentication:
+  - `http://USERNAME:PASSWORD@SERVER:PORT`
+  - `socks5://USERNAME:PASSWORD@SERVER:PORT`
+</ParamField>
+
+<ParamField path="proxy_bypass_list" type="List[str]" default="None">
+  List of hosts to bypass proxy.
+</ParamField>
+
+**Example:**
+
+```python
+browser = await uc.start()
+
+# Create context with proxy
+tab = await browser.create_context(
+    url='https://example.com',
+    proxy_server='socks5://user:pass@proxy.example.com:1080'
+)
+```
+
+### update_targets()
+
+Update the list of available targets (tabs, iframes, workers).
+
+```python
+async def update_targets(self)
+```
+
+## Iteration
+
+You can iterate over browser tabs:
+
+```python
+browser = await uc.start()
+
+# Open multiple tabs
+await browser.get('https://example.com')
+await browser.get('https://example.org', new_tab=True)
+
+# Iterate over all tabs
+for tab in browser:
+    print(tab.url)
+    
+# Or use .tabs property
+for tab in browser.tabs:
+    print(tab.url)
+```
+
+## Context Manager
+
+Use BrowserContext for automatic cleanup:
+
+```python
+from nodriver.core.browser import BrowserContext
+
+async with BrowserContext() as browser:
+    tab = await browser.get('https://example.com')
+    # Browser is automatically cleaned up on exit
+```
+
+## Examples
+
+### Basic browser control
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    
+    # Navigate to a page
+    tab = await browser.get('https://example.com')
+    
+    # Wait for page to load
+    await browser.wait(2)
+    
+    # Get all tabs
+    print(f"Open tabs: {len(browser.tabs)}")
+    
+    # Stop browser
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Working with multiple tabs
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    
+    # Open multiple sites
+    urls = [
+        'https://example.com',
+        'https://example.org',
+        'https://example.net'
+    ]
+    
+    for url in urls:
+        await browser.get(url, new_tab=True)
+    
+    # Tile all windows
+    await browser.tile_windows()
+    
+    # Process each tab
+    for i, tab in enumerate(browser.tabs):
+        print(f"Tab {i}: {tab.url}")
+        await tab.activate()
+        await browser.wait(1)
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## See also
+
+- [Tab class](/api/tab) - Control individual browser tabs
+- [Config class](/api/config) - Browser configuration options
+- [start()](/api/start) - Launch a browser instance

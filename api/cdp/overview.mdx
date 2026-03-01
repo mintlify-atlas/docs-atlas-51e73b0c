@@ -1,0 +1,295 @@
+---
+title: CDP Overview
+description: Chrome DevTools Protocol integration in nodriver
+icon: network-wired
+---
+
+## What is CDP?
+
+The Chrome DevTools Protocol (CDP) allows for tools to instrument, inspect, debug and profile Chromium-based browsers. nodriver includes a complete CDP implementation with type-safe Python bindings for all CDP domains, methods, and events.
+
+## Available Domains
+
+nodriver's CDP module includes bindings for all Chrome DevTools Protocol domains:
+
+### Core Domains
+
+- **Browser** - Browser-level operations
+- **Page** - Page-level operations, navigation, screenshots
+- **DOM** - DOM tree access and manipulation
+- **Runtime** - JavaScript execution and remote objects
+- **Network** - Network monitoring and modification
+- **Input** - Input event simulation (mouse, keyboard, touch)
+
+### Debugging & Profiling
+
+- **Debugger** - JavaScript debugging
+- **Profiler** - CPU profiling
+- **HeapProfiler** - Memory profiling
+- **Performance** - Performance metrics
+- **PerformanceTimeline** - Performance timeline events
+
+### Inspection & Testing
+
+- **Accessibility** - Accessibility tree inspection
+- **CSS** - CSS manipulation
+- **DOMDebugger** - DOM breakpoints
+- **DOMSnapshot** - DOM snapshot capture
+- **Overlay** - Visual overlays and highlighting
+
+### Storage & Data
+
+- **Storage** - Storage management (localStorage, sessionStorage, IndexedDB)
+- **IndexedDB** - IndexedDB operations
+- **CacheStorage** - Cache API operations
+- **DOMStorage** - DOM storage operations
+
+### Emulation & Devices
+
+- **Emulation** - Device emulation
+- **DeviceOrientation** - Device orientation override
+
+### Media & Graphics
+
+- **Media** - Media inspection
+- **WebAudio** - Web Audio API inspection
+- **Animation** - Animation inspection and control
+- **LayerTree** - Compositing layer tree
+
+### Security & Permissions
+
+- **Security** - Security state inspection
+- **ServiceWorker** - Service worker management
+- **WebAuthn** - Web Authentication API
+
+### Advanced
+
+- **Target** - Target (tab/page) management
+- **Fetch** - Network request interception
+- **Log** - Console log entries
+- **Tracing** - Chrome tracing
+- **IO** - Input/output operations
+- **Schema** - Protocol schema inspection
+
+And many more specialized domains.
+
+## CDP Package Structure
+
+The CDP module is organized by domain:
+
+```python
+from nodriver import cdp
+
+# Each domain is a module
+cdp.page        # Page domain
+cdp.dom         # DOM domain
+cdp.network     # Network domain
+cdp.runtime     # Runtime domain
+cdp.input_      # Input domain (note the underscore)
+# ... and many more
+```
+
+## Domain Components
+
+Each CDP domain contains:
+
+### Methods (Commands)
+
+Functions that send commands to the browser and return results:
+
+```python
+from nodriver import cdp
+
+# Methods are callable and return generator objects
+navigate_cmd = cdp.page.navigate(url='https://example.com')
+screenshot_cmd = cdp.page.capture_screenshot()
+enable_cmd = cdp.network.enable()
+```
+
+### Events
+
+Classes representing events emitted by the browser:
+
+```python
+from nodriver import cdp
+
+# Events are classes
+cdp.page.LoadEventFired
+cdp.network.RequestWillBeSent
+cdp.dom.DocumentUpdated
+```
+
+### Types
+
+Data classes representing CDP types:
+
+```python
+from nodriver import cdp
+
+# Types are data classes
+cdp.page.FrameId
+cdp.network.Request
+cdp.dom.Node
+cdp.runtime.RemoteObject
+```
+
+## Type Safety
+
+All CDP bindings are fully typed with:
+
+- Type hints for all parameters and return values
+- Dataclasses for complex types
+- Enums for enumerated values
+- Optional types for optional parameters
+
+```python
+from nodriver import cdp
+from typing import Optional
+
+# All properly typed
+frame_id: cdp.page.FrameId
+node: cdp.dom.Node
+remote_obj: cdp.runtime.RemoteObject
+```
+
+## Auto-Generated Documentation
+
+The CDP module is auto-generated from the Chrome DevTools Protocol specification, ensuring:
+
+- Complete coverage of all CDP features
+- Up-to-date with latest Chrome versions
+- Accurate type definitions
+- Comprehensive docstrings
+
+## Examples
+
+### Navigate using CDP
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = browser.main_tab
+    
+    # Send CDP command
+    frame_id, loader_id, error_text = await tab.send(
+        cdp.page.navigate(url='https://example.com')
+    )
+    
+    print(f"Navigated to frame: {frame_id}")
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Take screenshot with CDP
+
+```python
+import nodriver as uc
+from nodriver import cdp
+import base64
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Capture screenshot using CDP
+    screenshot_data = await tab.send(
+        cdp.page.capture_screenshot(format='png')
+    )
+    
+    # Save screenshot
+    with open('screenshot.png', 'wb') as f:
+        f.write(base64.b64decode(screenshot_data))
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Monitor network requests
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Enable network monitoring
+    await tab.send(cdp.network.enable())
+    
+    # Set up event handler
+    def handle_request(event: cdp.network.RequestWillBeSent):
+        print(f"Request: {event.request.url}")
+    
+    tab.add_handler(cdp.network.RequestWillBeSent, handle_request)
+    
+    # Navigate to trigger requests
+    await tab.get('https://example.org')
+    await tab.wait(3)
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Execute JavaScript
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Execute JavaScript using CDP
+    result = await tab.send(
+        cdp.runtime.evaluate(
+            expression='document.title',
+            return_by_value=True
+        )
+    )
+    
+    print(f"Page title: {result.value}")
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## When to Use CDP Directly
+
+Use CDP directly when you need:
+
+- **Low-level control** - Fine-grained control over browser behavior
+- **Advanced features** - Features not exposed in high-level API
+- **Performance optimization** - Minimize overhead with direct commands
+- **Event monitoring** - Listen to specific browser events
+- **Protocol compliance** - Follow exact CDP specifications
+
+## High-Level API vs CDP
+
+nodriver provides high-level methods that use CDP internally:
+
+```python
+# High-level API (recommended for most use cases)
+await tab.get('https://example.com')
+element = await tab.find('Login')
+await element.click()
+
+# Equivalent CDP commands (for advanced use cases)
+await tab.send(cdp.page.navigate(url='https://example.com'))
+# ... more CDP calls for finding and clicking
+```
+
+Use the high-level API when possible, and CDP when you need specific control.
+
+## See Also
+
+- [CDP Usage Guide](/api/cdp/usage) - How to use CDP in nodriver
+- [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) - Official CDP documentation
+- [Tab.send()](/api/tab) - Send CDP commands from tabs

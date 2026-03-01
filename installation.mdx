@@ -1,0 +1,229 @@
+---
+title: Installation
+description: Install nodriver and set up your environment for browser automation
+---
+
+## Prerequisites
+
+Before installing nodriver, ensure you have:
+
+<Steps>
+  <Step title="Python 3.9 or higher">
+    nodriver requires Python 3.9 or later. Check your version:
+    ```bash
+    python --version
+    ```
+  </Step>
+  
+  <Step title="A Chromium-based browser">
+    You need Chrome, Chromium, Edge, or Brave installed on your system, preferably in the default location.
+    
+    <Note>
+      nodriver will automatically locate your browser in most cases. You can specify a custom path if needed.
+    </Note>
+  </Step>
+</Steps>
+
+## Install with pip
+
+The easiest way to install nodriver is using pip:
+
+```bash
+pip install nodriver
+```
+
+<Tip>
+  It's recommended to use a virtual environment to avoid dependency conflicts:
+  ```bash
+  python -m venv venv
+  source venv/bin/activate  # On Windows: venv\Scripts\activate
+  pip install nodriver
+  ```
+</Tip>
+
+## Update to the latest version
+
+To update nodriver to the latest version:
+
+```bash
+pip install -U nodriver
+```
+
+## Dependencies
+
+nodriver has minimal dependencies that will be installed automatically:
+
+- **mss** - For screen capture functionality
+- **websockets** (>=14) - For CDP communication
+- **deprecated** - For deprecation warnings
+
+### Optional dependencies
+
+For additional features, you may want to install:
+
+<AccordionGroup>
+  <Accordion title="opencv-python (for Cloudflare verification)">
+    Required for the `tab.cf_verify()` method to work:
+    ```bash
+    pip install opencv-python
+    ```
+  </Accordion>
+  
+  <Accordion title="Development dependencies">
+    If you're contributing to nodriver:
+    ```bash
+    pip install nodriver[dev]
+    ```
+    This includes: black, build, isort, sphinx, and other development tools.
+  </Accordion>
+</AccordionGroup>
+
+## Installation for headless environments
+
+If you're running nodriver on a server or in a Docker container without a display, you have two options:
+
+<Tabs>
+  <Tab title="Headless mode">
+    Run nodriver in headless mode (no visible browser window):
+    ```python
+    import nodriver as uc
+    
+    async def main():
+        browser = await uc.start(headless=True)
+        # Your code here
+    
+    uc.loop().run_until_complete(main())
+    ```
+    
+    <Warning>
+      Headless mode may be more detectable by anti-bot systems. Use with caution.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Virtual display (Xvfb)">
+    Use Xvfb to emulate a screen on headless servers:
+    
+    **Install Xvfb:**
+    ```bash
+    # Debian/Ubuntu
+    apt-get install xvfb
+    
+    # Red Hat/CentOS
+    yum install xorg-x11-server-Xvfb
+    ```
+    
+    **Run your script with Xvfb:**
+    ```bash
+    xvfb-run python your_script.py
+    ```
+    
+    Or in Python:
+    ```python
+    from xvfbwrapper import Xvfb
+    
+    with Xvfb():
+        # Your nodriver code here
+        pass
+    ```
+  </Tab>
+</Tabs>
+
+## Docker installation
+
+For Docker environments, here's a sample Dockerfile:
+
+```dockerfile
+FROM python:3.11-slim
+
+# Install Chrome
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install nodriver
+RUN pip install nodriver
+
+# Copy your script
+COPY your_script.py .
+
+CMD ["python", "your_script.py"]
+```
+
+## Verify installation
+
+Verify that nodriver is installed correctly:
+
+```python
+import nodriver as uc
+
+print(f"nodriver version: {uc.__version__}")
+```
+
+Or run a quick test:
+
+```python
+import nodriver as uc
+
+async def test():
+    browser = await uc.start()
+    tab = await browser.get('https://www.google.com')
+    print(f"Page title: {await tab.get_title()}")
+    browser.stop()
+
+uc.loop().run_until_complete(test())
+```
+
+If this runs without errors and prints a page title, you're all set!
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Browser not found">
+    If nodriver can't find your browser, specify the path manually:
+    ```python
+    browser = await uc.start(
+        browser_executable_path="/path/to/chrome"
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission errors">
+    On Linux/Mac, you may need to make the browser executable:
+    ```bash
+    chmod +x /path/to/chrome
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    If you get a port conflict error, nodriver will usually find another port automatically. If issues persist, you can specify a port:
+    ```python
+    from nodriver import Config
+    
+    config = Config()
+    config.port = 9223  # Use a different port
+    browser = await uc.start(config=config)
+    ```
+  </Accordion>
+  
+  <Accordion title="Websockets connection failed">
+    Ensure you have websockets version 14 or higher:
+    ```bash
+    pip install --upgrade websockets
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<Card
+  title="Quickstart guide"
+  icon="play"
+  href="/quickstart"
+>
+  Now that you have nodriver installed, learn how to build your first automation script
+</Card>

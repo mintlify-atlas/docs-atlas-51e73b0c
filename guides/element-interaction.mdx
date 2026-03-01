@@ -1,0 +1,380 @@
+---
+title: Element interaction
+description: Learn how to interact with page elements - clicking, typing, selecting, and more
+---
+
+Nodriver provides powerful methods for interacting with web page elements. This guide covers the essential techniques for finding and manipulating DOM elements.
+
+## Finding elements
+
+Before you can interact with an element, you need to find it. Nodriver offers several methods:
+
+### By CSS selector
+
+Use `select()` for a single element or `select_all()` for multiple elements:
+
+```python
+import nodriver as uc
+
+browser = await uc.start()
+tab = await browser.get('https://example.com')
+
+# Find single element
+search_box = await tab.select('input[type=text]')
+
+# Find all elements
+all_links = await tab.select_all('a[href]')
+```
+
+<Note>
+  Both `select()` and `select_all()` will retry for up to 10 seconds (configurable via `timeout` parameter) if the element isn't immediately found, making them great for waiting for dynamic content.
+</Note>
+
+### By text content
+
+Use `find()` to locate elements containing specific text:
+
+```python
+# Find element by text (returns first match)
+login_button = await tab.find('Login')
+
+# Use best_match for more accurate results
+login_button = await tab.find('Login', best_match=True)
+```
+
+The `best_match=True` flag finds the element with the most similar text length, helping you get the right "Login" button instead of scripts or metadata containing "login".
+
+<Tip>
+  Use `find_all()` to get all elements containing specific text.
+</Tip>
+
+### Using XPath
+
+For complex queries, use XPath expressions:
+
+```python
+# Find all inline scripts (without src attribute)
+scripts = await tab.xpath('//script[not(@src)]')
+
+# Case-insensitive text search
+elements = await tab.xpath(
+    '//text()[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"),"search term")]'
+)
+```
+
+## Clicking elements
+
+Nodriver provides two ways to click elements:
+
+### Standard click
+
+The `click()` method simulates a JavaScript click:
+
+```python
+button = await tab.select('button.submit')
+await button.click()
+```
+
+From element.py:393-414:
+```python
+async def click(self):
+    """
+    Click the element.
+    """
+    self._remote_object = await self._tab.send(
+        cdp.dom.resolve_node(backend_node_id=self.backend_node_id)
+    )
+    arguments = [cdp.runtime.CallArgument(object_id=self._remote_object.object_id)]
+    await self.flash(0.25)
+    await self._tab.send(
+        cdp.runtime.call_function_on(
+            "(el) => el.click()",
+            object_id=self._remote_object.object_id,
+            arguments=arguments,
+            await_promise=True,
+            user_gesture=True,
+            return_by_value=True,
+        )
+    )
+```
+
+### Mouse click
+
+For native browser mouse events, use `mouse_click()`:
+
+```python
+button = await tab.select('.interactive-button')
+await button.mouse_click()
+```
+
+## Typing text
+
+Send text to input fields using `send_keys()`:
+
+```python
+input_field = await tab.select('input[name=username]')
+await input_field.send_keys('myusername')
+
+# Clear and type
+await input_field.clear_input()
+await input_field.send_keys('newusername')
+```
+
+<CodeGroup>
+```python Basic typing
+search_box = await tab.select('textarea')
+await search_box.send_keys('search query')
+```
+
+```python With special keys
+# Send Enter key
+await input_field.send_keys('\n')
+
+# Send Tab key  
+await input_field.send_keys('\t')
+```
+</CodeGroup>
+
+From element.py:708-722:
+```python
+async def send_keys(self, text: str):
+    """
+    send text to an input field, or any other html element.
+    
+    hint, if you ever get stuck where using click()
+    does not work, sending the keystroke \\n or \\r\\n or a spacebar work wonders!
+    """
+    await self.apply("(elem) => elem.focus()")
+    [
+        await self._tab.send(cdp.input_.dispatch_key_event("char", text=char))
+        for char in list(text)
+    ]
+```
+
+## Selecting options
+
+For dropdown menus and select elements:
+
+```python
+# Query all options
+select_element = await tab.select('select#country')
+options = await select_element.query_selector_all('option')
+
+# Select specific option
+for option in options:
+    if option.text == 'United States':
+        await option.select_option()
+        break
+```
+
+From element.py:749-766:
+```python
+async def select_option(self):
+    """
+    for form (select) fields. when you have queried the options you can call 
+    this method on the option object. Calling option.select_option() will use 
+    that option as selected value.
+    """
+    if self.node_name == "OPTION":
+        await self.apply(
+            """
+            (o) => {  
+                o.selected = true ; 
+                o.dispatchEvent(new Event('change', {view: window,bubbles: true}))
+            }
+            """
+        )
+```
+
+## File uploads
+
+Upload files using `send_file()`:
+
+```python
+from pathlib import Path
+
+file_input = await tab.select('input[type=file]')
+await file_input.send_file('/path/to/file.jpg')
+
+# Upload multiple files
+await file_input.send_file(
+    '/path/to/file1.jpg',
+    '/path/to/file2.jpg'
+)
+```
+
+<Warning>
+  Make sure the file input accepts multiple files if you're uploading more than one, otherwise the browser might crash.
+</Warning>
+
+## Mouse interactions
+
+### Hovering
+
+Trigger hover effects with `mouse_move()`:
+
+```python
+menu_item = await tab.select('.dropdown-trigger')
+await menu_item.mouse_move()
+```
+
+### Dragging
+
+Drag elements to different positions:
+
+```python
+# Drag to another element
+box = await tab.select('.box')
+target_area = await tab.select('.target-area')
+await box.mouse_drag(target_area)
+
+# Drag to absolute position
+await box.mouse_drag((500, 500))
+
+# Drag relative to current position
+await box.mouse_drag((100, 50), relative=True)
+
+# Smooth dragging with steps
+await box.mouse_drag(target_area, steps=50)
+```
+
+From mouse_drag_boxes.py example:
+```python
+boxes = await tab.select_all('.box')
+area = await tab.select('.area-a')
+
+for box in boxes:
+    # Drag with smooth animation
+    await box.mouse_drag(area, steps=100)
+```
+
+## Scrolling
+
+### Scroll element into view
+
+```python
+element = await tab.select('#footer')
+await element.scroll_into_view()
+```
+
+### Get element position
+
+```python
+position = await element.get_position()
+print(f"Element at x={position.x}, y={position.y}")
+print(f"Size: {position.width}x{position.height}")
+print(f"Center: {position.center}")
+```
+
+## Element properties
+
+Access element attributes directly:
+
+```python
+link = await tab.select('a')
+print(link.href)  # Access href attribute
+print(link.text)  # Get text content
+print(link.class_)  # Get class attribute
+
+# Get all attributes
+print(link.attrs)
+```
+
+## Applying custom JavaScript
+
+Execute custom JavaScript on elements:
+
+```python
+element = await tab.select('video')
+
+# Call element methods
+await element.apply('(elem) => elem.play()')
+
+# Modify properties
+await element.apply('(elem) => { elem.value = "new value" }')
+
+# Get return value
+value = await element.apply(
+    '(elem) => elem.getAttribute("data-id")',
+    return_by_value=True
+)
+```
+
+## Working with shadow DOM
+
+Access shadow root children:
+
+```python
+element = await tab.select('custom-element')
+shadow_children = element.shadow_children
+
+if shadow_children:
+    for child in shadow_children:
+        print(child.tag_name)
+```
+
+## Real-world example
+
+Here's a complete example from the imgur_upload_image.py demo:
+
+```python
+import nodriver as uc
+from pathlib import Path
+
+async def upload_to_imgur():
+    browser = await uc.start()
+    tab = await browser.get('https://imgur.com')
+    
+    # Accept cookies
+    consent = await tab.find('Consent', best_match=True)
+    await consent.click()
+    
+    # Click new post
+    new_post = await tab.find('new post', best_match=True)
+    await new_post.click()
+    
+    # Upload file
+    file_input = await tab.select('input[type=file]')
+    await file_input.send_file(Path('screenshot.jpg'))
+    
+    # Wait for upload
+    await tab.select('.Toast-message--check')
+    
+    # Fill title
+    title_field = await tab.find('give your post a unique title', best_match=True)
+    await title_field.send_keys('My awesome image')
+    
+    # Get link
+    grab_link = await tab.find('grab a link', best_match=True)
+    await grab_link.click()
+    
+    await tab.wait(2)
+    
+    link_input = await tab.select('input[value^=https]')
+    print(f"Uploaded: {link_input.attrs.value}")
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(upload_to_imgur())
+```
+
+## Best practices
+
+<Steps>
+
+### Use appropriate wait strategies
+
+The `select()` and `find()` methods have built-in retry logic with a default 10-second timeout.
+
+### Prefer JavaScript click for reliability
+
+The standard `click()` method works more reliably than `mouse_click()` in most cases.
+
+### Clear inputs before typing
+
+Always call `clear_input()` before `send_keys()` if you want to replace existing text.
+
+### Use best_match for text searches
+
+When searching by text, use `best_match=True` to get more accurate results.
+
+</Steps>

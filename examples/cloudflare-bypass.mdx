@@ -1,0 +1,314 @@
+---
+title: Bypassing CloudFlare protection
+description: Automatically bypass CloudFlare bot detection and verification challenges
+---
+
+nodriver is built to be undetectable by bot protection systems like CloudFlare. This example shows you how to access CloudFlare-protected sites and handle verification challenges.
+
+## How it works
+
+nodriver's core design makes it undetectable:
+
+- Uses a clean, unpatched Chrome browser
+- No automation signatures in the browser fingerprint
+- Natural mouse movements and interactions
+- Proper timing and behavior patterns
+
+Most CloudFlare-protected sites will work automatically without any special code.
+
+## Basic example
+
+Simply navigate to a CloudFlare-protected site:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    
+    # Navigate to CloudFlare-protected site
+    tab = await driver.get("https://www.nowsecure.nl")
+    
+    # CloudFlare check passes automatically
+    await tab
+    
+    # You can now interact with the page normally
+    print(f"Successfully loaded: {tab.url}")
+    print(f"Page title: {await tab.get_content()}")
+    
+    await tab.sleep(5)
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+<Note>
+  In most cases, CloudFlare protection is bypassed automatically. You don't need to write any special code - just navigate to the URL normally.
+</Note>
+
+## Handling verification checkboxes
+
+For sites with interactive verification (like "I'm not a robot" checkboxes), use the `verify_cf()` method:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    tab = await driver.get("https://www.nowsecure.nl")
+    
+    # Wait for page to load
+    await tab
+    
+    # Automatically find and click CloudFlare verification checkbox
+    result = await tab.verify_cf()
+    
+    if result:
+        print("CloudFlare verification passed!")
+    else:
+        print("No verification needed")
+    
+    # Continue with your scraping
+    content = await tab.select("body")
+    print(content.text)
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Multi-tab CloudFlare example
+
+You can handle multiple CloudFlare-protected sites simultaneously:
+
+```python
+import asyncio
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    
+    # Protected sites to access
+    urls = [
+        "https://www.nowsecure.nl",
+        "https://www.bet365.com",
+    ]
+    
+    # Open first URL
+    await driver.get(urls[0])
+    
+    # Open additional URLs in new windows
+    for url in urls[1:]:
+        await driver.get(url, new_window=True)
+    
+    # Wait for all tabs to load
+    for tab in driver.tabs:
+        await tab
+        print(f"Loaded: {tab.url}")
+    
+    # All CloudFlare checks pass automatically
+    await driver.sleep(5)
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Using template matching for custom challenges
+
+For custom verification UIs, you can use template matching to find and click verification elements:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    tab = await driver.get("https://protected-site.com")
+    
+    await tab
+    
+    # Use custom template image for verification
+    # The template should be a cropped image with the target in the center
+    template_path = "verify_button_template.png"
+    location = await tab.verify_cf(template_image=template_path, flash=True)
+    
+    if location:
+        print(f"Verification element found at: {location}")
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Key methods
+
+### verify_cf()
+
+Automatically finds and clicks CloudFlare verification checkboxes:
+
+```python
+# Basic usage
+await tab.verify_cf()
+
+# With custom template image
+await tab.verify_cf(template_image="path/to/template.png")
+
+# Flash the element when found (for debugging)
+await tab.verify_cf(flash=True)
+```
+
+<Info>
+  The `verify_cf()` method uses computer vision to locate verification checkboxes that are hidden from the DOM using shadow-root or web workers.
+</Info>
+
+### Template image format
+
+If you need to create a custom template image:
+
+1. Take a screenshot of the verification element
+2. Crop it to include the target area
+3. Ensure the target is in the center of the image
+4. Use a moderate size (e.g., 111x71 pixels)
+5. Include some surrounding context for better matching
+
+<Steps>
+  <Step title="Navigate to protected site">
+    Simply use `get()` as you normally would:
+    
+    ```python
+    tab = await driver.get("https://cloudflare-protected-site.com")
+    ```
+  </Step>
+
+  <Step title="Wait for page load">
+    Let the page fully load and CloudFlare checks complete:
+    
+    ```python
+    await tab
+    ```
+    
+    This is usually all you need. CloudFlare will pass automatically.
+  </Step>
+
+  <Step title="Handle verification if needed">
+    Only if there's an interactive challenge:
+    
+    ```python
+    await tab.verify_cf()
+    ```
+  </Step>
+
+  <Step title="Continue normally">
+    After verification, use the page as normal:
+    
+    ```python
+    # Find elements
+    element = await tab.find("your text here")
+    
+    # Extract data
+    data = await tab.select_all(".product")
+    ```
+  </Step>
+</Steps>
+
+## Best practices
+
+### Add realistic delays
+
+Mimic human behavior with natural pauses:
+
+```python
+# Wait after page load
+await tab
+await tab.sleep(1)
+
+# Wait between actions
+await element.click()
+await tab.sleep(0.5)
+```
+
+### Avoid detection patterns
+
+<CodeGroup>
+```python Good - Natural behavior
+# Use find() with best_match for realistic element selection
+button = await tab.find("submit", best_match=True)
+await tab.sleep(0.5)
+await button.click()
+```
+
+```python Bad - Too fast
+# Don't chain actions without delays
+button = await tab.select("button")
+await button.click()  # Too fast!
+```
+</CodeGroup>
+
+### Handle dynamic content
+
+```python
+# Wait for specific elements instead of fixed delays
+verification_passed = await tab.select(".verification-success")
+
+# Or use find() which auto-retries
+content = await tab.find("expected content", best_match=True)
+```
+
+<Warning>
+  While nodriver is very effective at bypassing bot detection, always:
+  - Respect robots.txt and terms of service
+  - Add reasonable delays between requests
+  - Don't hammer servers with rapid requests
+  - Consider the ethical and legal implications of your automation
+</Warning>
+
+## Advanced: Accessing bot challenge pages
+
+Some sites may still present challenges. Here's how to handle them:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    tab = await driver.get("https://challenging-site.com")
+    
+    # Wait for potential challenge page
+    await tab.sleep(3)
+    
+    # Check if we're on a challenge page
+    challenge = await tab.select("#challenge-form")
+    
+    if challenge:
+        # Try automatic verification
+        await tab.verify_cf(flash=True)
+        
+        # Wait for redirect
+        await tab.sleep(5)
+    
+    # Verify we're on the actual content
+    print(f"Final URL: {tab.url}")
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Troubleshooting
+
+If you're still being blocked:
+
+1. **Add more realistic delays**: Humans don't interact instantly
+2. **Use headless mode carefully**: Some sites detect headless browsers
+3. **Check your IP**: You might be rate-limited or blocked at the network level
+4. **Rotate user agents**: Though nodriver handles this, you can customize if needed
+5. **Check for captchas**: Some sites use captchas that require human solving
+
+<Note>
+  nodriver is designed to be undetectable, but it's not a magic bullet. Some advanced bot protection systems may still detect automation through behavioral analysis or require human intervention (like captchas).
+</Note>

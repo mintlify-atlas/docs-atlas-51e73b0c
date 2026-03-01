@@ -1,0 +1,680 @@
+---
+title: Advanced CDP
+description: Use Chrome DevTools Protocol directly for advanced browser automation
+---
+
+Nodriver is built on top of the Chrome DevTools Protocol (CDP), giving you direct access to powerful low-level browser controls. This guide covers advanced CDP usage for custom automation scenarios.
+
+## Understanding CDP
+
+The Chrome DevTools Protocol is the same protocol used by Chrome DevTools. It provides domains like Page, Network, DOM, Runtime, and many more.
+
+Nodriver exposes CDP through the `cdp` module:
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+browser = await uc.start()
+tab = browser.main_tab
+
+# Send CDP commands
+result = await tab.send(cdp.page.navigate('https://example.com'))
+```
+
+From tab.py:44-62:
+```python
+Custom CDP commands
+---------------------------
+Tab object provides many useful and often-used methods. It is also
+possible to utilize the included cdp classes to do something totally custom.
+
+The cdp package is a set of so-called "domains" with each having methods, 
+events and types. To send a cdp method, for example cdp.page.navigate, 
+you'll have to check whether the method accepts any parameters and whether 
+they are required or not.
+
+You can use:
+```python
+await tab.send(cdp.page.navigate(url='https://yoururlhere'))
+```
+
+So tab.send() accepts a generator object, which is created by calling a 
+cdp method. This way you can build very detailed and customized commands.
+```
+
+## Sending CDP commands
+
+### Basic command sending
+
+```python
+from nodriver import cdp
+
+tab = await browser.get('https://example.com')
+
+# Navigate using CDP
+frame_id, loader_id, error = await tab.send(
+    cdp.page.navigate(url='https://example.com')
+)
+print(f'Frame ID: {frame_id}')
+
+# Reload page
+await tab.send(cdp.page.reload(ignore_cache=True))
+
+# Get cookies
+cookies = await tab.send(cdp.storage.get_cookies())
+for cookie in cookies:
+    print(f'{cookie.name}: {cookie.value}')
+```
+
+### Evaluating JavaScript
+
+```python
+# Execute JavaScript
+remote_object, exception = await tab.send(
+    cdp.runtime.evaluate(
+        expression='document.title',
+        return_by_value=True
+    )
+)
+
+if not exception:
+    print(f'Title: {remote_object.value}')
+```
+
+## Network monitoring
+
+### Listening to network events
+
+From network_monitor.py example:
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = browser.main_tab
+    
+    # Add handlers for network events
+    tab.add_handler(cdp.network.RequestWillBeSent, send_handler)
+    tab.add_handler(cdp.network.ResponseReceived, receive_handler)
+    
+    await browser.get('https://example.com')
+    await tab.wait(5)
+
+async def receive_handler(event: cdp.network.ResponseReceived):
+    print(f'Response: {event.response.url}')
+    print(f'Status: {event.response.status}')
+
+async def send_handler(event: cdp.network.RequestWillBeSent):
+    r = event.request
+    print(f'{r.method} {r.url}')
+    for k, v in r.headers.items():
+        print(f'  {k}: {v}')
+```
+
+### Intercepting requests
+
+```python
+from nodriver import cdp
+
+tab = await browser.get('https://example.com')
+
+# Enable request interception
+await tab.send(
+    cdp.fetch.enable(
+        patterns=[
+            cdp.fetch.RequestPattern(
+                url_pattern='*',
+                resource_type=cdp.network.ResourceType.IMAGE
+            )
+        ]
+    )
+)
+
+# Handle intercepted requests
+async def request_paused_handler(event: cdp.fetch.RequestPaused):
+    # Block images
+    if event.resource_type == cdp.network.ResourceType.IMAGE:
+        await tab.send(
+            cdp.fetch.fail_request(
+                request_id=event.request_id,
+                error_reason=cdp.network.ErrorReason.BLOCKED_BY_CLIENT
+            )
+        )
+    else:
+        # Continue other requests
+        await tab.send(
+            cdp.fetch.continue_request(request_id=event.request_id)
+        )
+
+tab.add_handler(cdp.fetch.RequestPaused, request_paused_handler)
+```
+
+### Modifying requests
+
+```python
+async def modify_request_handler(event: cdp.fetch.RequestPaused):
+    # Modify headers
+    headers = dict(event.request.headers)
+    headers['X-Custom-Header'] = 'CustomValue'
+    
+    # Continue with modified headers
+    await tab.send(
+        cdp.fetch.continue_request(
+            request_id=event.request_id,
+            headers=[
+                cdp.fetch.HeaderEntry(name=k, value=v)
+                for k, v in headers.items()
+            ]
+        )
+    )
+
+tab.add_handler(cdp.fetch.RequestPaused, modify_request_handler)
+```
+
+## DOM manipulation
+
+### Direct DOM access
+
+```python
+from nodriver import cdp
+
+# Get document
+doc = await tab.send(cdp.dom.get_document(-1, True))
+print(f'Document node ID: {doc.node_id}')
+
+# Query selector
+node_id = await tab.send(
+    cdp.dom.query_selector(doc.node_id, 'button')
+)
+
+# Get element attributes
+attrs = await tab.send(
+    cdp.dom.get_attributes(node_id)
+)
+print(f'Attributes: {attrs}')
+
+# Set attribute
+await tab.send(
+    cdp.dom.set_attribute_value(
+        node_id=node_id,
+        name='data-custom',
+        value='my-value'
+    )
+)
+```
+
+### Getting computed styles
+
+```python
+# Get computed styles for element
+node_id = await tab.send(
+    cdp.dom.query_selector(doc.node_id, '.element')
+)
+
+styles = await tab.send(
+    cdp.css.get_computed_style_for_node(node_id)
+)
+
+for style in styles:
+    if style.name in ['color', 'background-color', 'font-size']:
+        print(f'{style.name}: {style.value}')
+```
+
+## Performance monitoring
+
+### Enable performance metrics
+
+```python
+from nodriver import cdp
+
+# Enable performance domain
+await tab.send(cdp.performance.enable())
+
+# Get metrics
+metrics = await tab.send(cdp.performance.get_metrics())
+
+for metric in metrics:
+    print(f'{metric.name}: {metric.value}')
+
+# Metrics include:
+# - Timestamp
+# - Documents
+# - Frames  
+# - JSEventListeners
+# - Nodes
+# - LayoutCount
+# - RecalcStyleCount
+# - JSHeapUsedSize
+# - JSHeapTotalSize
+```
+
+### Page load timing
+
+```python
+# Listen for load events
+load_event = asyncio.Event()
+
+async def load_handler(event: cdp.page.LoadEventFired):
+    print(f'Page loaded at: {event.timestamp}')
+    load_event.set()
+
+tab.add_handler(cdp.page.LoadEventFired, load_handler)
+
+# Navigate and wait for load
+await tab.send(cdp.page.navigate('https://example.com'))
+await load_event.wait()
+
+print('Page fully loaded!')
+```
+
+## Emulation
+
+### Device emulation
+
+```python
+from nodriver import cdp
+
+# Emulate mobile device
+await tab.send(
+    cdp.emulation.set_device_metrics_override(
+        width=375,
+        height=667,
+        device_scale_factor=2,
+        mobile=True,
+        screen_width=375,
+        screen_height=667
+    )
+)
+
+# Set user agent
+await tab.send(
+    cdp.emulation.set_user_agent_override(
+        user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X)...'
+    )
+)
+
+# Set geolocation
+await tab.send(
+    cdp.emulation.set_geolocation_override(
+        latitude=51.5074,
+        longitude=-0.1278,
+        accuracy=100
+    )
+)
+```
+
+### Touch emulation
+
+```python
+# Enable touch emulation
+await tab.send(
+    cdp.emulation.set_touch_emulation_enabled(
+        enabled=True,
+        max_touch_points=5
+    )
+)
+
+# Emulate touch tap
+await tab.send(
+    cdp.input_.dispatch_touch_event(
+        type_='touchStart',
+        touch_points=[
+            cdp.input_.TouchPoint(x=100, y=100, radius_x=5, radius_y=5)
+        ]
+    )
+)
+
+await tab.send(
+    cdp.input_.dispatch_touch_event(
+        type_='touchEnd',
+        touch_points=[]
+    )
+)
+```
+
+### Network throttling
+
+```python
+# Emulate slow 3G
+await tab.send(
+    cdp.network.emulate_network_conditions(
+        offline=False,
+        latency=400,  # ms
+        download_throughput=400 * 1024 / 8,  # bytes/sec
+        upload_throughput=400 * 1024 / 8,
+        connection_type=cdp.network.ConnectionType.CELLULAR_3_G
+    )
+)
+
+# Disable throttling
+await tab.send(
+    cdp.network.emulate_network_conditions(
+        offline=False,
+        latency=0,
+        download_throughput=-1,
+        upload_throughput=-1
+    )
+)
+```
+
+## Console monitoring
+
+### Listen to console messages
+
+```python
+from nodriver import cdp
+
+async def console_handler(event: cdp.runtime.ConsoleAPICalled):
+    args = event.args
+    message_parts = []
+    
+    for arg in args:
+        if arg.value:
+            message_parts.append(str(arg.value))
+        elif arg.description:
+            message_parts.append(arg.description)
+    
+    message = ' '.join(message_parts)
+    print(f'[CONSOLE {event.type_}] {message}')
+
+# Enable runtime domain
+await tab.send(cdp.runtime.enable())
+
+# Add handler
+tab.add_handler(cdp.runtime.ConsoleAPICalled, console_handler)
+
+# Now all console.log, console.error, etc. will be captured
+await tab.evaluate('console.log("Hello from page")')
+```
+
+### Exception monitoring
+
+```python
+async def exception_handler(event: cdp.runtime.ExceptionThrown):
+    details = event.exception_details
+    print(f'Exception: {details.text}')
+    if details.exception:
+        print(f'  Type: {details.exception.type_}')
+        print(f'  Description: {details.exception.description}')
+    print(f'  Line: {details.line_number}')
+    print(f'  Column: {details.column_number}')
+
+tab.add_handler(cdp.runtime.ExceptionThrown, exception_handler)
+
+# Trigger an error
+await tab.evaluate('throw new Error("Test error")')
+```
+
+## Security
+
+### Certificate error handling
+
+```python
+from nodriver import cdp
+
+# Ignore certificate errors
+await tab.send(
+    cdp.security.set_ignore_certificate_errors(ignore=True)
+)
+
+# Now can visit sites with invalid certificates
+await tab.get('https://self-signed.badssl.com/')
+```
+
+### Override security headers
+
+```python
+# Enable security domain
+await tab.send(cdp.security.enable())
+
+async def security_state_handler(event: cdp.security.SecurityStateChanged):
+    print(f'Security state: {event.security_state}')
+    if event.summary:
+        print(f'Summary: {event.summary}')
+
+tab.add_handler(cdp.security.SecurityStateChanged, security_state_handler)
+```
+
+## Advanced scripting
+
+### Add scripts on new documents
+
+```python
+from nodriver import cdp
+
+# Script runs on every new document
+script = """
+window.myCustomFunction = function() {
+    return 'Hello from injected script';
+};
+console.log('Script injected!');
+"""
+
+script_id = await tab.send(
+    cdp.page.add_script_to_evaluate_on_new_document(script)
+)
+
+# Now navigate
+await tab.get('https://example.com')
+
+# Test injected function
+result = await tab.evaluate('window.myCustomFunction()', return_by_value=True)
+print(result)  # 'Hello from injected script'
+```
+
+### Call function on remote object
+
+```python
+# Get remote object
+remote_obj, _ = await tab.send(
+    cdp.runtime.evaluate('document.body')
+)
+
+# Call method on remote object
+result = await tab.send(
+    cdp.runtime.call_function_on(
+        function_declaration='function() { return this.tagName; }',
+        object_id=remote_obj.object_id,
+        return_by_value=True
+    )
+)
+
+print(result[0].value)  # 'BODY'
+```
+
+## Downloads
+
+### Handle downloads
+
+```python
+from nodriver import cdp
+from pathlib import Path
+
+download_dir = Path('downloads')
+download_dir.mkdir(exist_ok=True)
+
+# Set download behavior
+await tab.send(
+    cdp.browser.set_download_behavior(
+        behavior='allow',
+        download_path=str(download_dir.resolve())
+    )
+)
+
+# Monitor download progress
+async def download_progress_handler(event: cdp.browser.DownloadProgress):
+    print(f'Download {event.guid}: {event.received_bytes} bytes')
+    if event.state == 'completed':
+        print(f'Download completed: {event.guid}')
+
+tab.add_handler(cdp.browser.DownloadProgress, download_progress_handler)
+
+# Trigger download
+download_link = await tab.select('a[download]')
+await download_link.click()
+```
+
+## Real-world example: Advanced monitoring
+
+```python
+import nodriver as uc
+from nodriver import cdp
+import json
+from pathlib import Path
+
+class AdvancedMonitor:
+    def __init__(self, tab):
+        self.tab = tab
+        self.requests = []
+        self.responses = []
+        self.console_logs = []
+        self.errors = []
+    
+    async def setup(self):
+        """Setup all monitoring handlers"""
+        # Network monitoring
+        self.tab.add_handler(
+            cdp.network.RequestWillBeSent,
+            self.on_request
+        )
+        self.tab.add_handler(
+            cdp.network.ResponseReceived,
+            self.on_response
+        )
+        
+        # Console monitoring  
+        await self.tab.send(cdp.runtime.enable())
+        self.tab.add_handler(
+            cdp.runtime.ConsoleAPICalled,
+            self.on_console
+        )
+        
+        # Exception monitoring
+        self.tab.add_handler(
+            cdp.runtime.ExceptionThrown,
+            self.on_exception
+        )
+    
+    async def on_request(self, event: cdp.network.RequestWillBeSent):
+        self.requests.append({
+            'url': event.request.url,
+            'method': event.request.method,
+            'timestamp': event.timestamp
+        })
+    
+    async def on_response(self, event: cdp.network.ResponseReceived):
+        self.responses.append({
+            'url': event.response.url,
+            'status': event.response.status,
+            'timestamp': event.timestamp
+        })
+    
+    async def on_console(self, event: cdp.runtime.ConsoleAPICalled):
+        message = ' '.join(
+            str(arg.value or arg.description) for arg in event.args
+        )
+        self.console_logs.append({
+            'type': event.type_,
+            'message': message,
+            'timestamp': event.timestamp
+        })
+    
+    async def on_exception(self, event: cdp.runtime.ExceptionThrown):
+        self.errors.append({
+            'message': event.exception_details.text,
+            'line': event.exception_details.line_number,
+            'timestamp': event.timestamp
+        })
+    
+    def save_report(self, filename='monitor_report.json'):
+        """Save monitoring data"""
+        report = {
+            'requests': self.requests,
+            'responses': self.responses,
+            'console_logs': self.console_logs,
+            'errors': self.errors,
+            'summary': {
+                'total_requests': len(self.requests),
+                'total_responses': len(self.responses),
+                'console_messages': len(self.console_logs),
+                'errors': len(self.errors)
+            }
+        }
+        
+        Path(filename).write_text(json.dumps(report, indent=2))
+        print(f'Report saved to {filename}')
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Setup monitoring
+    monitor = AdvancedMonitor(tab)
+    await monitor.setup()
+    
+    # Navigate and interact
+    await tab.wait(3)
+    
+    # Generate some activity
+    await tab.evaluate('console.log("Test message")')
+    await tab.scroll_down(50)
+    await tab.wait(2)
+    
+    # Save report
+    monitor.save_report()
+    
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+## Best practices
+
+<Steps>
+
+### Enable domains before use
+
+Some CDP features require enabling their domain first:
+
+```python
+await tab.send(cdp.runtime.enable())
+await tab.send(cdp.network.enable())
+await tab.send(cdp.page.enable())
+```
+
+### Handle CDP errors
+
+CDP commands can fail, always check for errors:
+
+```python
+try:
+    result = await tab.send(cdp.dom.query_selector(node_id, 'selector'))
+except Exception as e:
+    print(f'CDP error: {e}')
+```
+
+### Use typed CDP events
+
+Typecheck your event handlers for better IDE support:
+
+```python
+async def handler(event: cdp.network.ResponseReceived):
+    # IDE will provide autocomplete for event properties
+    print(event.response.url)
+```
+
+### Clean up handlers
+
+Remove handlers when no longer needed:
+
+```python
+tab.add_handler(cdp.network.RequestWillBeSent, handler)
+# Later...
+tab.remove_handler(cdp.network.RequestWillBeSent, handler)
+```
+
+</Steps>

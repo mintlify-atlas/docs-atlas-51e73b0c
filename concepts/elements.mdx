@@ -1,0 +1,585 @@
+---
+title: Element interaction and finding
+description: Learn how to find, interact with, and manipulate HTML elements on web pages
+---
+
+The `Element` class represents an HTML DOM element and provides methods for interaction, property access, and manipulation.
+
+## Understanding elements
+
+Elements in nodriver wrap CDP (Chrome DevTools Protocol) DOM nodes and provide a Pythonic interface for:
+- Clicking and user interaction
+- Getting and setting properties
+- Querying child elements
+- Executing JavaScript on elements
+- Taking screenshots
+
+<Info>
+  Elements are created by tab methods like `find()`, `select()`, and `query_selector()`. You typically don't instantiate them directly.
+</Info>
+
+## Getting elements
+
+### From tab searches
+
+```python
+# By text
+button = await tab.find('Login')
+
+# By CSS selector
+input_field = await tab.select('input[name="username"]')
+
+# All matching elements
+links = await tab.select_all('a[href]')
+```
+
+### From other elements
+
+Query within an element's children:
+
+```python
+form = await tab.select('form.login')
+submit = await form.query_selector('button[type="submit"]')
+inputs = await form.query_selector_all('input')
+```
+
+## Element properties
+
+### Core properties
+
+Access DOM node properties:
+
+```python
+# Node information
+node_id = element.node_id
+backend_node_id = element.backend_node_id
+node_type = element.node_type  # 1=element, 3=text node, etc.
+
+# Tag and name
+tag = element.tag  # e.g., 'div', 'button', 'a'
+tag_name = element.tag_name  # alias for tag
+node_name = element.node_name  # uppercase, e.g., 'DIV'
+
+# Node value (for text nodes)
+value = element.node_value
+```
+
+### HTML attributes
+
+Access element attributes directly:
+
+```python
+# Get attributes
+href = element.href
+src = element.src
+class_name = element.class_  # Note the underscore
+id_value = element.id
+
+# Or use dict-style access
+href = element['href']
+class_name = element['class']
+
+# All attributes as dict
+attrs = element.attrs
+for key, value in attrs.items():
+    print(f"{key} = {value}")
+```
+
+<Note>
+  The `class` attribute is accessed as `class_` (with underscore) to avoid conflicting with Python's `class` keyword.
+</Note>
+
+### Text content
+
+```python
+# Text of this element only
+text = element.text
+
+# Text of element and all children (concatenated)
+all_text = element.text_all
+```
+
+### Children and parent
+
+Navigate the DOM tree:
+
+```python
+# Get parent element
+parent = element.parent
+
+# Get children
+children = element.children
+for child in children:
+    print(child.tag)
+
+# Child count
+count = element.child_node_count
+
+# Shadow DOM children
+shadow_children = element.shadow_children
+```
+
+<Warning>
+  Access to `parent` and `children` requires the element to have its tree populated. Call `await element.update()` if these properties are `None`.
+</Warning>
+
+## Clicking and interaction
+
+### Click element
+
+The standard click method:
+
+```python
+await element.click()
+```
+
+This method:
+1. Resolves the element's remote object
+2. Flashes the element briefly (for debugging)
+3. Executes a JavaScript click on the element
+4. Triggers with user gesture
+
+### Mouse click
+
+Click at the element's position using mouse events:
+
+```python
+await element.mouse_click()
+# or
+await element.click_mouse()
+```
+
+<ParamField path="button" type="str" default="'left'">
+  Which mouse button to use ('left', 'right', 'middle').
+</ParamField>
+
+<ParamField path="buttons" type="int" default="1">
+  Bit field for pressed buttons (1=left, 2=right, 4=middle).
+</ParamField>
+
+<ParamField path="modifiers" type="int" default="0">
+  Bit field for modifier keys (Alt=1, Ctrl=2, Meta=4, Shift=8).
+</ParamField>
+
+### Mouse hover
+
+Trigger hover effects without clicking:
+
+```python
+await element.mouse_move()
+```
+
+### Drag and drop
+
+Drag an element to another location:
+
+```python
+# Drag to another element
+target = await tab.select('.drop-zone')
+await element.mouse_drag(target)
+
+# Drag to coordinates
+await element.mouse_drag((500, 300))
+
+# Drag relative to current position
+await element.mouse_drag((100, -50), relative=True)
+
+# Smooth dragging with steps
+await element.mouse_drag(target, steps=50)
+```
+
+<ParamField path="destination" type="Element | Tuple[int, int]" required>
+  Target element or (x, y) coordinates.
+</ParamField>
+
+<ParamField path="relative" type="bool" default="False">
+  Treat coordinates as relative offsets.
+</ParamField>
+
+<ParamField path="steps" type="int" default="1">
+  Number of intermediate points (higher = smoother but slower).
+</ParamField>
+
+## Form input
+
+### Send text
+
+Type text into input fields:
+
+```python
+input_field = await tab.select('input[name="username"]')
+await input_field.send_keys('myusername')
+```
+
+<Info>
+  Sending special characters like `\n` or `\r\n` can trigger form submissions. Useful when click doesn't work!
+</Info>
+
+### Clear input
+
+```python
+await input_field.clear_input()
+```
+
+### Upload files
+
+Send files to file input elements:
+
+```python
+file_input = await tab.select('input[type="file"]')
+await file_input.send_file('/path/to/file.pdf')
+
+# Multiple files
+await file_input.send_file(
+    '/path/to/file1.jpg',
+    '/path/to/file2.jpg'
+)
+```
+
+### Focus element
+
+```python
+await element.focus()
+```
+
+### Select options
+
+For `<select>` dropdown options:
+
+```python
+select = await tab.select('select#country')
+option = await select.query_selector('option[value="US"]')
+await option.select_option()
+```
+
+## JavaScript execution
+
+### Apply JavaScript function
+
+Execute JavaScript with the element as a parameter:
+
+```python
+# Simple function
+result = await element.apply('(el) => el.value')
+
+# Set properties
+await element.apply('(el) => { el.value = "new value" }')
+
+# Call methods
+await element.apply('(el) => el.play()')  # for video elements
+
+# Complex operations
+await element.apply('''
+    (el) => {
+        el.style.backgroundColor = 'red';
+        el.scrollIntoView();
+        return el.getBoundingClientRect();
+    }
+''')
+```
+
+<ParamField path="js_function" type="str" required>
+  JavaScript function that receives the element as its parameter.
+</ParamField>
+
+<ParamField path="return_by_value" type="bool" default="True">
+  Return the actual value instead of a RemoteObject.
+</ParamField>
+
+### Call element methods
+
+Shorthand for calling methods:
+
+```python
+# Call play() on video element
+await element('play')
+
+# Equivalent to:
+await element.apply('(e) => e.play()')
+```
+
+### Get JavaScript attributes
+
+Retrieve all JavaScript properties:
+
+```python
+js_attrs = await element.get_js_attributes()
+print(js_attrs['offsetWidth'])
+print(js_attrs['scrollHeight'])
+```
+
+## Position and visibility
+
+### Get position
+
+Get the element's position and dimensions:
+
+```python
+pos = await element.get_position()
+print(f"Left: {pos.left}, Top: {pos.top}")
+print(f"Width: {pos.width}, Height: {pos.height}")
+print(f"Center: {pos.center}")  # (x, y) tuple
+
+# Absolute position (including scroll offset)
+pos = await element.get_position(abs=True)
+print(f"Absolute X: {pos.abs_x}, Y: {pos.abs_y}")
+```
+
+### Scroll into view
+
+Ensure the element is visible:
+
+```python
+await element.scroll_into_view()
+```
+
+## Screenshots
+
+Capture an image of just the element:
+
+```python
+# Auto-generated filename
+path = await element.save_screenshot()
+
+# Custom filename
+path = await element.save_screenshot('button.png')
+
+# JPEG format with scaling
+path = await element.save_screenshot(
+    'element.jpg',
+    format='jpeg',
+    scale=2  # 2x size
+)
+```
+
+<ParamField path="filename" type="PathLike" default="'auto'">
+  Save path. When 'auto', generates a name from the page URL and timestamp.
+</ParamField>
+
+<ParamField path="format" type="str" default="'jpeg'">
+  Image format: 'jpeg' or 'png'.
+</ParamField>
+
+<ParamField path="scale" type="float" default="1">
+  Scale factor (1=normal, 2=double size, 0.5=half size).
+</ParamField>
+
+<Warning>
+  If the element is hidden, has no size, or is not in the viewport, `save_screenshot()` raises a `RuntimeError`.
+</Warning>
+
+## Debugging and highlighting
+
+### Flash element
+
+Briefly show a red indicator on the element:
+
+```python
+await element.flash(duration=0.5)
+```
+
+### DevTools-style highlight
+
+Highlight element like Chrome DevTools:
+
+```python
+# Highlight
+await element.highlight_overlay()
+
+# Remove highlight (call again)
+await element.highlight_overlay()
+```
+
+## Content manipulation
+
+### Get HTML
+
+Get the element's outer HTML:
+
+```python
+html = await element.get_html()
+print(html)
+```
+
+### Set value
+
+For text nodes:
+
+```python
+await element.set_value('new value')
+```
+
+### Set text content
+
+```python
+await element.set_text('new text content')
+```
+
+### Remove from DOM
+
+Delete the element:
+
+```python
+await element.remove_from_dom()
+```
+
+### Save to DOM
+
+Save modifications back to the DOM:
+
+```python
+# Modify attributes
+element.attrs['class'] = 'new-class'
+
+# Save changes
+await element.save_to_dom()
+```
+
+## Updating elements
+
+Refresh element data and populate tree:
+
+```python
+await element.update()
+```
+
+This:
+- Fetches the latest DOM state
+- Populates `parent` and `children` properties
+- Resolves the remote object
+- Updates attributes
+
+<Info>
+  Use `await element` as shorthand for `await element.update()`.
+</Info>
+
+## Special element types
+
+### Iframe elements
+
+Access iframe content:
+
+```python
+iframe = await tab.select('iframe#my-frame')
+
+# Get content document
+content = iframe.content_document
+
+# Query within iframe
+button = await iframe.query_selector('button.submit')
+```
+
+### Shadow DOM
+
+Access shadow root children:
+
+```python
+host = await tab.select('.shadow-host')
+shadow_children = host.shadow_children
+
+for child in shadow_children:
+    print(child.tag)
+```
+
+### Video elements
+
+Record video playback:
+
+```python
+video = await tab.select('video')
+
+# Record until video ends or pauses
+await video.record_video(
+    filename='recording.mp4',
+    folder='./downloads',
+    duration=30  # Stop after 30 seconds
+)
+
+# Check if recording
+is_rec = await video.is_recording()
+```
+
+## Properties reference
+
+### Commonly used
+
+<ParamField path="tag" type="str">
+  Element tag name in lowercase (e.g., 'div', 'button').
+</ParamField>
+
+<ParamField path="tag_name" type="str">
+  Alias for `tag`.
+</ParamField>
+
+<ParamField path="node_id" type="int">
+  CDP node ID.
+</ParamField>
+
+<ParamField path="backend_node_id" type="int">
+  Backend node ID used for many CDP operations.
+</ParamField>
+
+<ParamField path="node_type" type="int">
+  Node type: 1=element, 3=text, 8=comment, 9=document.
+</ParamField>
+
+<ParamField path="attrs" type="ContraDict">
+  Dictionary of element attributes.
+</ParamField>
+
+<ParamField path="text" type="str">
+  Text content of this element only.
+</ParamField>
+
+<ParamField path="text_all" type="str">
+  Concatenated text of element and all descendants.
+</ParamField>
+
+<ParamField path="parent" type="Element">
+  Parent element.
+</ParamField>
+
+<ParamField path="children" type="List[Element]">
+  Direct child elements.
+</ParamField>
+
+<ParamField path="tab" type="Tab">
+  The tab this element belongs to.
+</ParamField>
+
+## Best practices
+
+<Accordion title="Check element existence">
+  Finding methods may return `None` after timeout. Always check before using:
+  ```python
+  button = await tab.find('Submit')
+  if button:
+      await button.click()
+  ```
+</Accordion>
+
+<Accordion title="Use click() for most interactions">
+  The standard `click()` method is more reliable than `mouse_click()` for most use cases.
+</Accordion>
+
+<Accordion title="Update when DOM changes">
+  If the page updates, call `await element.update()` to refresh element properties.
+</Accordion>
+
+<Accordion title="Scroll into view before interaction">
+  Some elements need to be visible:
+  ```python
+  await element.scroll_into_view()
+  await element.click()
+  ```
+</Accordion>
+
+<Accordion title="Use flash() for debugging">
+  When developing, use `await element.flash()` to verify you've found the right element.
+</Accordion>
+
+## Related documentation
+
+- [Tab management](/concepts/tabs) - Finding elements from tabs
+- [Browser management](/concepts/browser) - Browser lifecycle
+- [Configuration](/concepts/configuration) - Browser setup

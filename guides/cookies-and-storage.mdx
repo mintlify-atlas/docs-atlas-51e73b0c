@@ -1,0 +1,531 @@
+---
+title: Cookies and storage
+description: Manage cookies, localStorage, and browser storage mechanisms
+---
+
+Nodriver provides comprehensive methods for managing browser cookies and storage. This is essential for maintaining sessions, testing authentication flows, and handling state.
+
+## Working with cookies
+
+### Accessing the cookie jar
+
+The browser object provides a `cookies` property for cookie management:
+
+```python
+import nodriver as uc
+
+browser = await uc.start()
+
+# Access cookie jar
+cookie_jar = browser.cookies
+```
+
+### Getting all cookies
+
+Retrieve all cookies from the browser:
+
+```python
+# Get cookies as CDP objects
+cookies = await browser.cookies.get_all()
+
+for cookie in cookies:
+    print(f"{cookie.name}: {cookie.value}")
+    print(f"  Domain: {cookie.domain}")
+    print(f"  Path: {cookie.path}")
+    print(f"  Secure: {cookie.secure}")
+```
+
+From browser.py:734-769:
+```python
+async def get_all(
+    self, requests_cookie_format: bool = False
+) -> List[Union[cdp.network.Cookie, "http.cookiejar.Cookie"]]:
+    """
+    Get all cookies
+    
+    :param requests_cookie_format: when True, returns python http.cookiejar.Cookie 
+                                    objects, compatible with requests library and many others.
+    """
+    connection = None
+    for tab in self._browser.tabs:
+        if tab.closed:
+            continue
+        connection = tab
+        break
+    else:
+        connection = self._browser.connection
+    cookies = await connection.send(cdp.storage.get_cookies())
+    if requests_cookie_format:
+        import requests.cookies
+        
+        return [
+            requests.cookies.create_cookie(
+                name=c.name,
+                value=c.value,
+                domain=c.domain,
+                path=c.path,
+                expires=c.expires,
+                secure=c.secure,
+            )
+            for c in cookies
+        ]
+    return cookies
+```
+
+### Getting cookies in requests format
+
+Get cookies compatible with the Python `requests` library:
+
+```python
+import requests
+
+# Get cookies in requests format
+cookies = await browser.cookies.get_all(requests_cookie_format=True)
+
+# Use with requests library
+response = requests.get('https://api.example.com', cookies=cookies)
+```
+
+<Tip>
+  This is useful when you need to transfer cookies from a browser session to API calls made with `requests`.
+</Tip>
+
+### Setting cookies
+
+Set cookies programmatically:
+
+```python
+from nodriver import cdp
+
+# Create cookie parameters
+cookies = [
+    cdp.network.CookieParam(
+        name='session_id',
+        value='abc123def456',
+        domain='.example.com',
+        path='/',
+        secure=True,
+        http_only=True
+    ),
+    cdp.network.CookieParam(
+        name='user_pref',
+        value='dark_mode',
+        domain='example.com',
+        path='/'
+    )
+]
+
+await browser.cookies.set_all(cookies)
+```
+
+### Clearing cookies
+
+Remove all cookies from the browser:
+
+```python
+# Clear all cookies
+await browser.cookies.clear()
+```
+
+From browser.py:880-898:
+```python
+async def clear(self):
+    """
+    Clear current cookies
+    
+    Note: this includes all open tabs/windows for this browser
+    """
+    connection = None
+    for tab in self._browser.tabs:
+        if tab.closed:
+            continue
+        connection = tab
+        break
+    else:
+        connection = self._browser.connection
+    
+    await connection.send(cdp.storage.clear_cookies())
+```
+
+<Warning>
+  Clearing cookies affects all tabs and windows in the browser instance.
+</Warning>
+
+## Saving and loading cookies
+
+### Save cookies to file
+
+Persist cookies for later use:
+
+```python
+# Save all cookies
+await browser.cookies.save(file='session.dat')
+
+# Save cookies matching a pattern
+await browser.cookies.save(
+    file='cloudflare.dat',
+    pattern='(cf|cloudflare)'
+)
+
+# Save .com cookies
+await browser.cookies.save(
+    file='dotcom.dat', 
+    pattern='\.com'
+)
+```
+
+From browser.py:791-834:
+```python
+async def save(self, file: PathLike = ".session.dat", pattern: str = ".*"):
+    """
+    Save all cookies (or a subset, controlled by `pattern`) to a file 
+    to be restored later
+    
+    :param file: path to save file
+    :param pattern: regex style pattern string.
+           Any cookie that has a domain, key or value field which matches 
+           the pattern will be included.
+           default = ".*"  (all)
+           
+           eg: the pattern "(cf|.com|nowsecure)" will include those cookies which:
+                - have a string "cf" (cloudflare)
+                - have ".com" in them, in either domain, key or value field.
+                - contain "nowsecure"
+    """
+    import re
+    
+    pattern = re.compile(pattern)
+    save_path = pathlib.Path(file).resolve()
+    connection = None
+    for tab in self._browser.tabs:
+        if tab.closed:
+            continue
+        connection = tab
+        break
+    else:
+        connection = self._browser.connection
+    
+    cookies = await self.get_all(requests_cookie_format=False)
+    included_cookies = []
+    for cookie in cookies:
+        for match in pattern.finditer(str(cookie.__dict__)):
+            logger.debug(
+                "saved cookie for matching pattern '%s' => (%s: %s)",
+                pattern.pattern,
+                cookie.name,
+                cookie.value,
+            )
+            included_cookies.append(cookie)
+            break
+    pickle.dump(cookies, save_path.open("w+b"))
+```
+
+### Load cookies from file
+
+Restore previously saved cookies:
+
+```python
+# Load all cookies
+await browser.cookies.load(file='session.dat')
+
+# Load specific cookies using pattern
+await browser.cookies.load(
+    file='session.dat',
+    pattern='(session|auth)'
+)
+```
+
+<CodeGroup>
+```python Save and restore session
+# Save session after login
+await browser.cookies.save('logged_in.dat')
+
+# Later, restore session
+browser = await uc.start()
+await browser.cookies.load('logged_in.dat')
+tab = await browser.get('https://example.com')
+# Now logged in!
+```
+
+```python Filter by domain
+# Save only google cookies
+await browser.cookies.save(
+    'google.dat',
+    pattern='google'
+)
+
+# Load them back
+await browser.cookies.load(
+    'google.dat',
+    pattern='google'
+)
+```
+</CodeGroup>
+
+## Using CDP for advanced cookie operations
+
+For more control, use the Chrome DevTools Protocol directly:
+
+```python
+from nodriver import cdp
+
+tab = await browser.get('https://example.com')
+
+# Get cookies for specific URL
+cookies = await tab.send(
+    cdp.network.get_cookies(urls=['https://example.com'])
+)
+
+# Set a cookie with all options
+await tab.send(
+    cdp.network.set_cookie(
+        name='my_cookie',
+        value='cookie_value',
+        domain='example.com',
+        path='/',
+        secure=True,
+        http_only=True,
+        same_site=cdp.network.CookieSameSite.LAX,
+        expires=1234567890  # Unix timestamp
+    )
+)
+
+# Delete specific cookie
+await tab.send(
+    cdp.network.delete_cookies(
+        name='my_cookie',
+        domain='example.com'
+    )
+)
+```
+
+## Working with localStorage
+
+Access browser localStorage using JavaScript evaluation:
+
+```python
+tab = await browser.get('https://example.com')
+
+# Set localStorage item
+await tab.evaluate('localStorage.setItem("key", "value")')
+
+# Get localStorage item
+value = await tab.evaluate(
+    'localStorage.getItem("key")',
+    return_by_value=True
+)
+print(value)
+
+# Remove item
+await tab.evaluate('localStorage.removeItem("key")')
+
+# Clear all localStorage
+await tab.evaluate('localStorage.clear()')
+
+# Get all localStorage data
+all_storage = await tab.evaluate(
+    'JSON.stringify(localStorage)',
+    return_by_value=True
+)
+import json
+storage_dict = json.loads(all_storage)
+```
+
+## Working with sessionStorage
+
+Similar to localStorage but scoped to the tab:
+
+```python
+# Set sessionStorage item
+await tab.evaluate('sessionStorage.setItem("tempKey", "tempValue")')
+
+# Get sessionStorage item  
+value = await tab.evaluate(
+    'sessionStorage.getItem("tempKey")',
+    return_by_value=True
+)
+
+# Clear sessionStorage
+await tab.evaluate('sessionStorage.clear()')
+```
+
+## IndexedDB access
+
+For IndexedDB operations, use JavaScript:
+
+```python
+# Open IndexedDB
+script = """
+(async () => {
+    const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('myDatabase', 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+    return db.name;
+})();
+"""
+
+db_name = await tab.evaluate(script, await_promise=True, return_by_value=True)
+print(f"Database: {db_name}")
+```
+
+## Cache storage
+
+Manage cache storage via CDP:
+
+```python
+from nodriver import cdp
+
+# Get cache names
+caches = await tab.send(cdp.cache_storage.request_cache_names(
+    security_origin='https://example.com'
+))
+
+for cache in caches:
+    print(cache)
+
+# Delete cache
+if caches:
+    await tab.send(cdp.cache_storage.delete_cache(
+        cache_id=caches[0].cache_id
+    ))
+```
+
+## Real-world example: Login persistence
+
+Here's a complete example of maintaining login state:
+
+```python
+import nodriver as uc
+from pathlib import Path
+
+SESSION_FILE = Path('session.dat')
+
+async def login_once():
+    """Login and save session"""
+    browser = await uc.start()
+    tab = await browser.get('https://example.com/login')
+    
+    # Perform login
+    username = await tab.select('input[name=username]')
+    await username.send_keys('myuser')
+    
+    password = await tab.select('input[name=password]')
+    await password.send_keys('mypass')
+    
+    submit = await tab.select('button[type=submit]')
+    await submit.click()
+    
+    # Wait for redirect
+    await tab.wait(3)
+    
+    # Save session
+    await browser.cookies.save(SESSION_FILE)
+    print('Session saved!')
+    
+    return browser
+
+async def use_saved_session():
+    """Use previously saved session"""
+    browser = await uc.start()
+    
+    # Load cookies before navigating
+    if SESSION_FILE.exists():
+        await browser.cookies.load(SESSION_FILE)
+        print('Session loaded!')
+    
+    # Navigate - should be logged in
+    tab = await browser.get('https://example.com/dashboard')
+    await tab.wait(2)
+    
+    # Verify logged in
+    try:
+        profile = await tab.select('.user-profile', timeout=5)
+        print('Successfully logged in with saved session!')
+    except:
+        print('Session expired, need to login again')
+    
+    return browser
+
+async def main():
+    if not SESSION_FILE.exists():
+        browser = await login_once()
+    else:
+        browser = await use_saved_session()
+    
+    # Continue with your automation...
+    await browser.wait(5)
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+## Working with service workers
+
+Manage service workers using CDP:
+
+```python
+from nodriver import cdp
+
+# Get all service workers
+workers = await tab.send(cdp.service_worker.get_registrations())
+
+for worker in workers:
+    print(f"Scope: {worker.scope_url}")
+    print(f"Script: {worker.script_url}")
+
+# Unregister service worker
+if workers:
+    await tab.send(
+        cdp.service_worker.unregister(
+            scope_url=workers[0].scope_url
+        )
+    )
+```
+
+## Best practices
+
+<Steps>
+
+### Save cookies after authentication
+
+Always save cookies immediately after successful login to avoid repeating authentication.
+
+### Use patterns for targeted cookie operations
+
+When saving/loading, use regex patterns to filter only relevant cookies:
+
+```python
+await browser.cookies.save('auth.dat', pattern='(session|auth|token)')
+```
+
+### Handle cookie expiration
+
+Check if loaded cookies are still valid before relying on them:
+
+```python
+if SESSION_FILE.exists():
+    await browser.cookies.load(SESSION_FILE)
+    # Verify session is still valid
+    tab = await browser.get('https://example.com/profile')
+    try:
+        await tab.select('.logged-in-indicator', timeout=3)
+    except:
+        # Session expired, re-authenticate
+        await login_again()
+```
+
+### Clear storage for clean tests
+
+For testing, start with a clean slate:
+
+```python
+# Clear all storage
+await browser.cookies.clear()
+await tab.evaluate('localStorage.clear()')
+await tab.evaluate('sessionStorage.clear()')
+```
+
+</Steps>

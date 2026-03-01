@@ -1,0 +1,412 @@
+---
+title: Config
+description: Configure browser launch parameters and behavior
+icon: gear
+---
+
+## Overview
+
+The `Config` class encapsulates all browser configuration options. You can create a Config object to customize browser behavior, or pass parameters directly to `start()` or `Browser.create()`.
+
+<Note>
+  Calling a Config instance (e.g., `config()`) returns the list of command-line arguments that will be passed to the browser.
+</Note>
+
+## Constructor
+
+```python
+def __init__(
+    self,
+    user_data_dir: Optional[PathLike] = None,
+    headless: Optional[bool] = False,
+    browser_executable_path: Optional[PathLike] = None,
+    browser_args: Optional[List[str]] = None,
+    sandbox: Optional[bool] = True,
+    lang: Optional[str] = "en-US",
+    host: str = None,
+    port: int = None,
+    expert: bool = None,
+    **kwargs: dict,
+)
+```
+
+## Parameters
+
+<ParamField path="user_data_dir" type="PathLike" default="None">
+  Path to the user data directory. If not specified, a temporary directory is created and deleted on exit.
+</ParamField>
+
+<ParamField path="headless" type="bool" default="False">
+  Run browser in headless mode (no visible window).
+</ParamField>
+
+<ParamField path="browser_executable_path" type="PathLike" default="None">
+  Path to the browser executable. If not specified, nodriver will auto-detect Chrome/Chromium.
+</ParamField>
+
+<ParamField path="browser_args" type="List[str]" default="None">
+  Additional command-line arguments to pass to the browser.
+</ParamField>
+
+<ParamField path="sandbox" type="bool" default="True">
+  Enable sandbox mode. When False, adds `--no-sandbox`. Automatically disabled when running as root on Linux.
+</ParamField>
+
+<ParamField path="lang" type="str" default="en-US">
+  Browser language setting.
+</ParamField>
+
+<ParamField path="host" type="str" default="None">
+  Host for remote debugging. When both host and port are set, connects to existing browser instead of launching new one.
+</ParamField>
+
+<ParamField path="port" type="int" default="None">
+  Port for remote debugging. When both host and port are set, connects to existing browser instead of launching new one.
+</ParamField>
+
+<ParamField path="expert" type="bool" default="None">
+  Enable expert mode with additional debugging features and reduced security restrictions.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict" default="None">
+  Additional keyword arguments are stored as attributes on the Config object.
+</ParamField>
+
+## Properties
+
+<ResponseField name="browser_args" type="List[str]">
+  Returns the complete list of browser arguments (default args + custom args).
+</ResponseField>
+
+<ResponseField name="user_data_dir" type="str">
+  Path to the user data directory.
+</ResponseField>
+
+<ResponseField name="uses_custom_data_dir" type="bool">
+  Whether a custom user data directory was specified (True) or a temporary one was created (False).
+</ResponseField>
+
+<ResponseField name="browser_executable_path" type="str">
+  Path to the browser executable.
+</ResponseField>
+
+<ResponseField name="headless" type="bool">
+  Whether running in headless mode.
+</ResponseField>
+
+<ResponseField name="sandbox" type="bool">
+  Whether sandbox is enabled.
+</ResponseField>
+
+<ResponseField name="lang" type="str">
+  Browser language setting.
+</ResponseField>
+
+<ResponseField name="host" type="str">
+  Remote debugging host.
+</ResponseField>
+
+<ResponseField name="port" type="int">
+  Remote debugging port.
+</ResponseField>
+
+<ResponseField name="expert" type="bool">
+  Whether expert mode is enabled.
+</ResponseField>
+
+## Methods
+
+### add_argument()
+
+Add a custom browser argument.
+
+```python
+def add_argument(self, arg: str)
+```
+
+<ParamField path="arg" type="str" required>
+  Browser argument to add (e.g., "--disable-gpu").
+</ParamField>
+
+<Warning>
+  Cannot add arguments related to headless, data-dir, sandbox, or lang. Use Config properties instead.
+</Warning>
+
+**Example:**
+
+```python
+config = Config()
+config.add_argument('--disable-gpu')
+config.add_argument('--window-size=1920,1080')
+```
+
+### add_extension()
+
+Add a Chrome extension to load.
+
+```python
+def add_extension(self, extension_path: PathLike)
+```
+
+<ParamField path="extension_path" type="PathLike" required>
+  Path to extension folder (containing manifest) or .crx file.
+</ParamField>
+
+**Example:**
+
+```python
+config = Config()
+config.add_extension('/path/to/extension/folder')
+config.add_extension('/path/to/extension.crx')
+
+browser = await Browser.create(config)
+```
+
+### __call__()
+
+Get the list of browser arguments.
+
+```python
+def __call__(self) -> List[str]
+```
+
+**Returns:** Complete list of command-line arguments to pass to the browser.
+
+**Example:**
+
+```python
+config = Config(headless=True)
+args = config()
+print(args)
+# ['--remote-allow-origins=*', '--no-first-run', ..., '--headless=new']
+```
+
+## Default Browser Arguments
+
+The Config class automatically includes these default arguments:
+
+- `--remote-allow-origins=*` - Allow remote connections
+- `--no-first-run` - Skip first run wizards
+- `--no-service-autorun` - Disable service auto-run
+- `--no-default-browser-check` - Skip default browser check
+- `--homepage=about:blank` - Set homepage to blank
+- `--no-pings` - Disable hyperlink auditing
+- `--password-store=basic` - Use basic password store
+- `--disable-infobars` - Disable info bars
+- `--disable-breakpad` - Disable crash reporter
+- `--disable-dev-shm-usage` - Disable /dev/shm usage
+- `--disable-session-crashed-bubble` - Disable crash bubble
+- `--disable-search-engine-choice-screen` - Skip search engine choice
+
+## Examples
+
+### Basic configuration
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+async def main():
+    # Create config
+    config = Config(
+        headless=True,
+        lang='en-US'
+    )
+    
+    # Launch with config
+    browser = await uc.start(config)
+    tab = await browser.get('https://example.com')
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Custom user data directory
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+async def main():
+    # Use persistent profile
+    config = Config(
+        user_data_dir='/path/to/chrome/profile'
+    )
+    
+    browser = await uc.start(config)
+    tab = await browser.get('https://example.com')
+    
+    # Cookies and settings will persist
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Advanced configuration
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+async def main():
+    config = Config(
+        headless=False,
+        browser_args=[
+            '--window-size=1920,1080',
+            '--disable-blink-features=AutomationControlled',
+        ],
+        expert=True
+    )
+    
+    # Add more arguments
+    config.add_argument('--disable-gpu')
+    
+    # Add extension
+    config.add_extension('/path/to/extension')
+    
+    browser = await uc.start(config)
+    tab = await browser.get('https://example.com')
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Connect to existing browser
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+async def main():
+    # First, launch Chrome manually with:
+    # chrome --remote-debugging-port=9222
+    
+    config = Config(
+        host='127.0.0.1',
+        port=9222
+    )
+    
+    # Connect to existing browser
+    browser = await uc.start(config)
+    
+    # Control existing tabs
+    for tab in browser.tabs:
+        print(f"Tab URL: {tab.url}")
+
+uc.loop().run_until_complete(main())
+```
+
+### Expert mode for testing
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+async def main():
+    # Expert mode enables:
+    # - Disabled web security for cross-origin access
+    # - Disabled site isolation
+    # - Shadow roots forced to open mode
+    config = Config(
+        expert=True,
+        headless=False
+    )
+    
+    browser = await uc.start(config)
+    tab = await browser.get('https://example.com')
+    
+    # Shadow DOM elements will be accessible
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Multiple browser instances
+
+```python
+import nodriver as uc
+from nodriver import Config
+import asyncio
+
+async def create_browser_instance(profile_dir, port):
+    config = Config(
+        user_data_dir=profile_dir,
+        port=port
+    )
+    return await uc.start(config)
+
+async def main():
+    # Launch multiple isolated browser instances
+    browser1 = await create_browser_instance('/tmp/profile1', 9222)
+    browser2 = await create_browser_instance('/tmp/profile2', 9223)
+    
+    tab1 = await browser1.get('https://example.com')
+    tab2 = await browser2.get('https://example.org')
+    
+    await asyncio.sleep(5)
+    
+    browser1.stop()
+    browser2.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## Utility Functions
+
+### find_chrome_executable()
+
+Find Chrome/Chromium executable on the system.
+
+```python
+from nodriver.core.config import find_chrome_executable
+
+# Get path to Chrome
+chrome_path = find_chrome_executable()
+print(chrome_path)
+
+# Get all Chrome installations
+all_chrome = find_chrome_executable(return_all=True)
+```
+
+### temp_profile_dir()
+
+Generate a temporary profile directory path.
+
+```python
+from nodriver.core.config import temp_profile_dir
+
+temp_dir = temp_profile_dir()
+print(temp_dir)  # e.g., /tmp/uc_abc123
+```
+
+### is_root()
+
+Check if running as root/administrator.
+
+```python
+from nodriver.core.config import is_root
+
+if is_root():
+    print("Running as root")
+```
+
+## Notes
+
+<Warning>
+  When running as root on Linux, sandbox is automatically disabled as Chrome requires this to start.
+</Warning>
+
+<Note>
+  Temporary user data directories are automatically cleaned up when the browser stops.
+</Note>
+
+<Note>
+  Expert mode reduces security restrictions and should only be used for testing and development.
+</Note>
+
+## See also
+
+- [start()](/api/start) - Launch browser with configuration
+- [Browser.create()](/api/browser) - Create browser instance

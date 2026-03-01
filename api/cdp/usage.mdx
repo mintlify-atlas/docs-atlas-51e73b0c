@@ -1,0 +1,565 @@
+---
+title: CDP Usage
+description: How to use Chrome DevTools Protocol commands in nodriver
+icon: code
+---
+
+## Sending CDP Commands
+
+Use the `send()` method on Tab or Browser objects to send CDP commands:
+
+```python
+import nodriver as uc
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = browser.main_tab
+    
+    # Send CDP command
+    result = await tab.send(cdp.page.navigate(url='https://example.com'))
+    
+    browser.stop()
+```
+
+## Command Structure
+
+CDP commands are generator objects created by calling methods from CDP domain modules:
+
+```python
+from nodriver import cdp
+
+# Create command (returns generator)
+command = cdp.page.navigate(url='https://example.com')
+
+# Send command (await the result)
+result = await tab.send(command)
+```
+
+## Return Values
+
+CDP commands return different types based on the command:
+
+```python
+from nodriver import cdp
+
+# Single value
+html = await tab.send(cdp.page.get_frame_tree())
+
+# Multiple values (tuple unpacking)
+frame_id, loader_id, error_text = await tab.send(
+    cdp.page.navigate(url='https://example.com')
+)
+
+# No return value (None)
+await tab.send(cdp.page.enable())
+```
+
+## Common CDP Tasks
+
+### Navigation
+
+```python
+from nodriver import cdp
+
+# Navigate to URL
+frame_id, loader_id, error = await tab.send(
+    cdp.page.navigate(url='https://example.com')
+)
+
+# Go back
+await tab.send(cdp.page.navigate_to_history_entry(entry_id=-1))
+
+# Reload page
+await tab.send(cdp.page.reload(ignore_cache=True))
+
+# Stop loading
+await tab.send(cdp.page.stop_loading())
+```
+
+### Screenshots
+
+```python
+from nodriver import cdp
+import base64
+
+# Capture viewport screenshot
+screenshot_base64 = await tab.send(
+    cdp.page.capture_screenshot(
+        format='png',
+        quality=90
+    )
+)
+
+# Save screenshot
+with open('screenshot.png', 'wb') as f:
+    f.write(base64.b64decode(screenshot_base64))
+
+# Full page screenshot
+await tab.send(cdp.emulation.set_device_metrics_override(
+    width=1280,
+    height=1024,
+    device_scale_factor=1,
+    mobile=False
+))
+
+screenshot = await tab.send(
+    cdp.page.capture_screenshot(
+        format='png',
+        capture_beyond_viewport=True
+    )
+)
+```
+
+### JavaScript Execution
+
+```python
+from nodriver import cdp
+
+# Evaluate expression
+result = await tab.send(
+    cdp.runtime.evaluate(
+        expression='2 + 2',
+        return_by_value=True
+    )
+)
+print(result.value)  # 4
+
+# Execute async JavaScript
+result = await tab.send(
+    cdp.runtime.evaluate(
+        expression='''
+            new Promise(resolve => {
+                setTimeout(() => resolve('done'), 1000);
+            })
+        ''',
+        await_promise=True,
+        return_by_value=True
+    )
+)
+print(result.value)  # 'done'
+
+# Call function on object
+remote_object = await tab.send(
+    cdp.runtime.evaluate(
+        expression='document',
+        return_by_value=False
+    )
+)
+
+result = await tab.send(
+    cdp.runtime.call_function_on(
+        function_declaration='function() { return this.title; }',
+        object_id=remote_object.object_id,
+        return_by_value=True
+    )
+)
+print(result.value)  # Page title
+```
+
+### DOM Manipulation
+
+```python
+from nodriver import cdp
+
+# Get document
+doc = await tab.send(cdp.dom.get_document(depth=-1, pierce=True))
+
+# Query selector
+node_id = await tab.send(
+    cdp.dom.query_selector(
+        node_id=doc.node_id,
+        selector='button.submit'
+    )
+)
+
+# Get outer HTML
+html = await tab.send(
+    cdp.dom.get_outer_html(node_id=node_id)
+)
+
+# Set attribute
+await tab.send(
+    cdp.dom.set_attribute_value(
+        node_id=node_id,
+        name='class',
+        value='button primary'
+    )
+)
+
+# Remove node
+await tab.send(cdp.dom.remove_node(node_id=node_id))
+```
+
+### Network Monitoring
+
+```python
+from nodriver import cdp
+
+# Enable network tracking
+await tab.send(cdp.network.enable())
+
+# Set user agent
+await tab.send(
+    cdp.network.set_user_agent_override(
+        user_agent='Custom User Agent/1.0'
+    )
+)
+
+# Block URLs
+await tab.send(
+    cdp.network.set_blocked_ur_ls(
+        urls=['*://*.ads.com/*', '*://*.tracking.com/*']
+    )
+)
+
+# Get cookies
+cookies = await tab.send(cdp.network.get_all_cookies())
+for cookie in cookies:
+    print(f"{cookie.name}: {cookie.value}")
+
+# Set cookie
+await tab.send(
+    cdp.network.set_cookie(
+        name='session',
+        value='abc123',
+        domain='example.com',
+        path='/',
+        secure=True,
+        http_only=True
+    )
+)
+```
+
+### Input Simulation
+
+```python
+from nodriver import cdp
+
+# Mouse click
+await tab.send(
+    cdp.input_.dispatch_mouse_event(
+        type_='mousePressed',
+        x=100,
+        y=200,
+        button='left',
+        click_count=1
+    )
+)
+
+await tab.send(
+    cdp.input_.dispatch_mouse_event(
+        type_='mouseReleased',
+        x=100,
+        y=200,
+        button='left',
+        click_count=1
+    )
+)
+
+# Keyboard input
+await tab.send(
+    cdp.input_.dispatch_key_event(
+        type_='keyDown',
+        text='Hello'
+    )
+)
+
+# Insert text
+await tab.send(
+    cdp.input_.insert_text(text='Hello World')
+)
+```
+
+### Emulation
+
+```python
+from nodriver import cdp
+
+# Set geolocation
+await tab.send(
+    cdp.emulation.set_geolocation_override(
+        latitude=37.7749,
+        longitude=-122.4194,
+        accuracy=100
+    )
+)
+
+# Set timezone
+await tab.send(
+    cdp.emulation.set_timezone_override(
+        timezone_id='America/New_York'
+    )
+)
+
+# Emulate mobile device
+await tab.send(
+    cdp.emulation.set_device_metrics_override(
+        width=375,
+        height=812,
+        device_scale_factor=3,
+        mobile=True
+    )
+)
+
+# Set touch emulation
+await tab.send(
+    cdp.emulation.set_touch_emulation_enabled(
+        enabled=True,
+        max_touch_points=5
+    )
+)
+```
+
+## Event Handling
+
+Listen to CDP events using event handlers:
+
+```python
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Enable network domain
+    await tab.send(cdp.network.enable())
+    
+    # Define event handler
+    def on_request(event: cdp.network.RequestWillBeSent):
+        print(f"Request: {event.request.method} {event.request.url}")
+    
+    def on_response(event: cdp.network.ResponseReceived):
+        print(f"Response: {event.response.status} {event.response.url}")
+    
+    # Add handlers
+    tab.add_handler(cdp.network.RequestWillBeSent, on_request)
+    tab.add_handler(cdp.network.ResponseReceived, on_response)
+    
+    # Trigger events by navigating
+    await tab.get('https://example.org')
+    await tab.wait(3)
+    
+    browser.stop()
+```
+
+### Common Events
+
+```python
+from nodriver import cdp
+
+# Page events
+cdp.page.LoadEventFired
+cdp.page.DomContentEventFired
+cdp.page.FrameNavigated
+cdp.page.FrameStartedLoading
+
+# Network events
+cdp.network.RequestWillBeSent
+cdp.network.ResponseReceived
+cdp.network.LoadingFinished
+cdp.network.LoadingFailed
+
+# Console events
+cdp.log.EntryAdded
+
+# Runtime events
+cdp.runtime.ConsoleAPICalled
+cdp.runtime.ExceptionThrown
+```
+
+## Request Interception
+
+Intercept and modify network requests:
+
+```python
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Enable fetch domain for interception
+    await tab.send(
+        cdp.fetch.enable(
+            patterns=[
+                cdp.fetch.RequestPattern(
+                    url_pattern='*',
+                    resource_type=cdp.network.ResourceType.DOCUMENT
+                )
+            ]
+        )
+    )
+    
+    # Handle intercepted requests
+    def on_request_paused(event: cdp.fetch.RequestPaused):
+        # Modify headers
+        headers = event.request.headers.copy()
+        headers['X-Custom-Header'] = 'MyValue'
+        
+        # Continue request with modified headers
+        asyncio.create_task(
+            tab.send(
+                cdp.fetch.continue_request(
+                    request_id=event.request_id,
+                    headers=headers
+                )
+            )
+        )
+    
+    tab.add_handler(cdp.fetch.RequestPaused, on_request_paused)
+    
+    await tab.get('https://example.org')
+    await tab.wait(3)
+    
+    browser.stop()
+```
+
+## Performance Monitoring
+
+```python
+from nodriver import cdp
+
+# Enable performance tracking
+await tab.send(cdp.performance.enable())
+
+# Get metrics
+metrics = await tab.send(cdp.performance.get_metrics())
+for metric in metrics:
+    print(f"{metric.name}: {metric.value}")
+
+# Performance timeline
+await tab.send(cdp.performance_timeline.enable(
+    event_types=['mark', 'measure']
+))
+```
+
+## Storage Access
+
+```python
+from nodriver import cdp
+
+# Local storage
+await tab.send(cdp.dom_storage.enable())
+
+storage_id = cdp.dom_storage.StorageId(
+    security_origin='https://example.com',
+    is_local_storage=True
+)
+
+# Get items
+items = await tab.send(
+    cdp.dom_storage.get_dom_storage_items(storage_id=storage_id)
+)
+
+# Set item
+await tab.send(
+    cdp.dom_storage.set_dom_storage_item(
+        storage_id=storage_id,
+        key='theme',
+        value='dark'
+    )
+)
+
+# Clear storage
+await tab.send(
+    cdp.dom_storage.clear(storage_id=storage_id)
+)
+```
+
+## Advanced Examples
+
+### Capture network response bodies
+
+```python
+from nodriver import cdp
+import asyncio
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    await tab.send(cdp.network.enable())
+    
+    responses = {}
+    
+    async def on_response(event: cdp.network.ResponseReceived):
+        request_id = event.request_id
+        url = event.response.url
+        
+        try:
+            body = await tab.send(
+                cdp.network.get_response_body(request_id=request_id)
+            )
+            responses[url] = body
+        except:
+            pass
+    
+    tab.add_handler(cdp.network.ResponseReceived, on_response)
+    
+    await tab.get('https://api.example.com/data')
+    await tab.wait(3)
+    
+    for url, body in responses.items():
+        print(f"URL: {url}")
+        print(f"Body: {body[:100]}...")  # First 100 chars
+    
+    browser.stop()
+```
+
+### Custom device emulation
+
+```python
+from nodriver import cdp
+
+async def emulate_iphone(tab):
+    # Set viewport
+    await tab.send(
+        cdp.emulation.set_device_metrics_override(
+            width=390,
+            height=844,
+            device_scale_factor=3,
+            mobile=True,
+        )
+    )
+    
+    # Set user agent
+    await tab.send(
+        cdp.emulation.set_user_agent_override(
+            user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15',
+            platform='iPhone'
+        )
+    )
+    
+    # Enable touch
+    await tab.send(
+        cdp.emulation.set_touch_emulation_enabled(
+            enabled=True,
+            max_touch_points=5
+        )
+    )
+```
+
+## Best Practices
+
+<Note>
+  **Enable domains before use** - Many CDP commands require enabling their domain first with `domain.enable()`.
+</Note>
+
+<Note>
+  **Handle async events** - Event handlers may need to use `asyncio.create_task()` for async operations.
+</Note>
+
+<Note>
+  **Check return types** - CDP commands return different types. Check the type hints or documentation.
+</Note>
+
+<Warning>
+  **Cleanup handlers** - Remove event handlers when done to prevent memory leaks.
+</Warning>
+
+## See Also
+
+- [CDP Overview](/api/cdp/overview) - Introduction to CDP in nodriver
+- [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) - Official CDP documentation
+- [Tab class](/api/tab) - Tab methods including `send()`

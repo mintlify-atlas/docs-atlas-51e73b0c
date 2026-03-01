@@ -1,0 +1,419 @@
+---
+title: Multi-tab and window management
+description: Work with multiple browser tabs and windows simultaneously, including parallel operations
+---
+
+nodriver makes it easy to manage multiple tabs and windows, run parallel operations, and coordinate complex multi-page workflows.
+
+## Opening multiple tabs
+
+### New tabs vs new windows
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    
+    # First tab opens in main window
+    tab1 = await driver.get("https://www.google.com")
+    
+    # Open in new tab (same window)
+    tab2 = await driver.get("https://github.com", new_tab=True)
+    
+    # Open in new window
+    tab3 = await driver.get("https://stackoverflow.com", new_window=True)
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+<Note>
+  Use `new_tab=True` to open URLs in the same window, or `new_window=True` to create separate browser windows.
+</Note>
+
+## Working with multiple tabs
+
+Here's a complete example that opens and manages multiple tabs:
+
+```python
+import asyncio
+import nodriver as uc
+from nodriver import cdp
+
+async def request_handler(ev: cdp.fetch.RequestPaused, tab):
+    print('\nRequestPaused handler\n', ev)
+    print('TAB = ', tab)
+    tab.feed_cdp(cdp.fetch.continue_request(request_id=ev.request_id))
+
+async def main():
+    browser = await uc.start()
+    
+    # Open 10 tabs
+    [await browser.get(
+        'https://www.google.com',
+        new_window=True)
+     for _ in range(10)]
+    
+    # Add handler to each tab
+    for tab in browser:
+        print(tab)
+        tab.add_handler(cdp.fetch.RequestPaused, request_handler)
+        await tab.send(cdp.fetch.enable())
+    
+    # Wait for all tabs to load
+    for tab in browser:
+        await tab
+    
+    # Activate each tab
+    for tab in browser:
+        await tab.activate()
+    
+    # Close tabs in reverse order
+    for tab in reversed(browser):
+        await tab.activate()
+        await tab.close()
+    
+    browser.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Iterating over tabs
+
+The Browser object is iterable and provides multiple ways to access tabs:
+
+```python
+# Access all tabs
+for tab in driver.tabs:
+    print(f"Tab URL: {tab.url}")
+
+# Iterate directly over browser
+for tab in driver:
+    await tab.activate()
+
+# Get main tab (first tab opened)
+main = driver.main_tab
+
+# Filter tabs by URL
+google_tabs = [tab for tab in driver.tabs if "google" in tab.url]
+```
+
+## Parallel operations
+
+Use `asyncio.gather()` to run operations on multiple tabs simultaneously:
+
+```python
+import asyncio
+import nodriver as uc
+
+async def scrape_tab(tab, query):
+    """Scrape a single tab"""
+    await tab.select("textarea")
+    search_box = await tab.select("textarea")
+    await search_box.send_keys(query)
+    
+    search_btn = await tab.find("Google Search", best_match=True)
+    await search_btn.click()
+    
+    # Wait for results
+    await tab.select("#search")
+    
+    return tab.url
+
+async def main():
+    browser = await uc.start()
+    
+    queries = ["python", "javascript", "rust", "golang"]
+    
+    # Open a tab for each query
+    tabs = []
+    for i, query in enumerate(queries):
+        if i == 0:
+            tab = await browser.get("https://www.google.com")
+        else:
+            tab = await browser.get("https://www.google.com", new_tab=True)
+        tabs.append(tab)
+    
+    # Run searches in parallel
+    results = await asyncio.gather(
+        *[scrape_tab(tab, query) for tab, query in zip(tabs, queries)]
+    )
+    
+    for query, result in zip(queries, results):
+        print(f"{query}: {result}")
+    
+    browser.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+<Steps>
+  <Step title="Open multiple tabs">
+    Create tabs using a loop or list comprehension:
+    
+    ```python
+    # Open 5 tabs
+    tabs = []
+    for i in range(5):
+        tab = await browser.get(
+            "https://example.com",
+            new_window=True
+        )
+        tabs.append(tab)
+    ```
+  </Step>
+
+  <Step title="Run operations in parallel">
+    Use `asyncio.gather()` for concurrent operations:
+    
+    ```python
+    # Process all tabs at once
+    await asyncio.gather(
+        *[process_tab(tab) for tab in tabs]
+    )
+    ```
+  </Step>
+
+  <Step title="Filter and organize tabs">
+    Filter tabs by URL or other properties:
+    
+    ```python
+    # Get specific tabs
+    google_tabs = [t for t in browser.tabs if "google" in t.url]
+    github_tabs = [t for t in browser.tabs if "github" in t.url]
+    ```
+  </Step>
+
+  <Step title="Clean up">
+    Close tabs when done:
+    
+    ```python
+    for tab in tabs:
+        await tab.close()
+    ```
+  </Step>
+</Steps>
+
+## Window management
+
+Control window size, position, and state:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    tab = await driver.get("https://example.com")
+    
+    # Get window info
+    window_id, bounds = await tab.get_window()
+    print(f"Window at: {bounds.left}, {bounds.top}")
+    print(f"Size: {bounds.width}x{bounds.height}")
+    
+    # Resize window
+    await tab.set_window_size(left=100, top=100, width=800, height=600)
+    
+    # Maximize window
+    await tab.maximize()
+    
+    # Fullscreen
+    await tab.fullscreen()
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Advanced: Tiling windows
+
+Automatic window tiling for better visualization:
+
+```python
+import nodriver as uc
+
+async def main():
+    driver = await uc.start()
+    
+    # Open multiple windows
+    await driver.get("https://www.google.com")
+    
+    for i in range(5):
+        await driver.get("https://www.github.com", new_window=True)
+    
+    # Automatically tile all windows
+    grid = await driver.tile_windows(max_columns=3)
+    
+    await driver.sleep(5)
+    
+    # Tile specific tabs
+    specific_tabs = driver.tabs[:3]
+    positions = await driver.tile_windows(specific_tabs)
+    
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Real-world example: Coordinated scraping
+
+Here's a practical example that scrapes multiple pages in parallel:
+
+```python
+import asyncio
+import nodriver as uc
+
+async def scrape_page(tab, url, selector):
+    """Scrape specific content from a page"""
+    await tab.get(url)
+    await tab
+    
+    # Wait for and get elements
+    elements = await tab.select_all(selector)
+    
+    results = []
+    for elem in elements:
+        results.append({
+            'text': elem.text,
+            'url': tab.url
+        })
+    
+    return results
+
+async def main():
+    browser = await uc.start()
+    
+    # Pages to scrape
+    targets = [
+        ("https://news.ycombinator.com", ".titleline > a"),
+        ("https://www.reddit.com/r/programming", "h3"),
+        ("https://github.com/trending", "h2.h3"),
+    ]
+    
+    # Create a tab for each target
+    tabs = []
+    for i, (url, selector) in enumerate(targets):
+        if i == 0:
+            tab = browser.main_tab
+        else:
+            tab = await browser.get("about:blank", new_tab=True)
+        tabs.append((tab, url, selector))
+    
+    # Scrape all pages in parallel
+    results = await asyncio.gather(
+        *[scrape_page(tab, url, sel) for tab, url, sel in tabs]
+    )
+    
+    # Process results
+    for (url, _), page_results in zip(targets, results):
+        print(f"\nResults from {url}:")
+        for item in page_results[:5]:  # Show first 5
+            print(f"  - {item['text']}")
+    
+    browser.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Tab activation and control
+
+```python
+# Activate (bring to front) a tab
+await tab.activate()
+
+# Close a tab
+await tab.close()
+
+# Get tab URL
+print(tab.url)
+
+# Check if tab is still valid
+if tab in browser.tabs:
+    await tab.activate()
+```
+
+## Key patterns
+
+### Keep reference to main tab
+
+```python
+main_tab = driver.main_tab
+
+# Open other tabs
+tab2 = await driver.get("https://example.com", new_tab=True)
+tab3 = await driver.get("https://example.org", new_tab=True)
+
+# Return to main tab
+await main_tab.activate()
+```
+
+### Safe tab closing
+
+```python
+# Close all except main tab
+for tab in driver.tabs:
+    if tab != driver.main_tab:
+        await tab.close()
+```
+
+### Parallel with error handling
+
+```python
+async def safe_scrape(tab, url):
+    try:
+        await tab.get(url)
+        await tab
+        return await tab.select("h1")
+    except Exception as e:
+        print(f"Error scraping {url}: {e}")
+        return None
+
+# Run with error handling
+results = await asyncio.gather(
+    *[safe_scrape(tab, url) for tab, url in zip(tabs, urls)],
+    return_exceptions=True
+)
+```
+
+<Warning>
+  When closing tabs in a loop, iterate in reverse order to avoid index issues:
+  
+  ```python
+  for tab in reversed(driver.tabs):
+      if tab != driver.main_tab:
+          await tab.close()
+  ```
+</Warning>
+
+## Browser object as iterator
+
+The Browser object provides several iteration patterns:
+
+```python
+# All tabs (including non-page targets)
+for tab in browser:
+    print(tab.type_)  # 'page', 'background_page', etc.
+
+# Only page tabs
+for tab in browser.tabs:
+    print(tab.url)
+
+# Reversed iteration
+for tab in reversed(browser):
+    await tab.activate()
+
+# Enumerate for index
+for i, tab in enumerate(browser.tabs):
+    print(f"Tab {i}: {tab.url}")
+```
+
+<Note>
+  Use `browser.tabs` to get only page-type tabs, or iterate `browser` directly to include all target types (pages, iframes, workers, etc.).
+</Note>

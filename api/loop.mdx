@@ -1,0 +1,102 @@
+---
+title: loop()
+description: Create a new event loop for running async nodriver code
+icon: rotate
+---
+
+## Overview
+
+The `loop()` function creates and sets a new asyncio event loop. This is a convenience function for running nodriver's async functions in a synchronous context.
+
+## Signature
+
+```python
+def loop() -> asyncio.AbstractEventLoop
+```
+
+## Returns
+
+<ResponseField name="event_loop" type="asyncio.AbstractEventLoop">
+  A new asyncio event loop that you can use to run async functions.
+</ResponseField>
+
+## Examples
+
+### Basic usage
+
+```python
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    browser.stop()
+
+if __name__ == '__main__':
+    # Create event loop and run async function
+    uc.loop().run_until_complete(main())
+```
+
+### Running multiple coroutines
+
+```python
+import nodriver as uc
+import asyncio
+
+async def scrape_site(url):
+    browser = await uc.start()
+    tab = await browser.get(url)
+    content = await tab.get_content()
+    browser.stop()
+    return content
+
+async def main():
+    urls = [
+        'https://example.com',
+        'https://example.org',
+        'https://example.net'
+    ]
+    
+    # Run multiple scraping tasks concurrently
+    results = await asyncio.gather(
+        *[scrape_site(url) for url in urls]
+    )
+    return results
+
+if __name__ == '__main__':
+    results = uc.loop().run_until_complete(main())
+    print(results)
+```
+
+### Alternative: Using asyncio directly
+
+You can also use Python's built-in `asyncio.run()` (Python 3.7+):
+
+```python
+import nodriver as uc
+import asyncio
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    browser.stop()
+
+if __name__ == '__main__':
+    # Alternative to uc.loop().run_until_complete()
+    asyncio.run(main())
+```
+
+## Notes
+
+<Note>
+  The `loop()` function is a convenience wrapper around `asyncio.new_event_loop()` and `asyncio.set_event_loop()`.
+</Note>
+
+<Note>
+  In Python 3.7+, you can use `asyncio.run()` instead of `uc.loop().run_until_complete()` for simpler code.
+</Note>
+
+## See also
+
+- [start()](/api/start) - Launch a browser instance
+- [Python asyncio documentation](https://docs.python.org/3/library/asyncio.html) - Learn more about async programming

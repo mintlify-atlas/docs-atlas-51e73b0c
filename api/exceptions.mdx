@@ -1,0 +1,384 @@
+---
+title: Exceptions
+description: Exception classes raised by nodriver
+icon: triangle-exclamation
+---
+
+## Overview
+
+nodriver defines custom exception classes to handle errors from the Chrome DevTools Protocol and browser operations. Understanding these exceptions helps you write robust automation scripts.
+
+## Exception Classes
+
+### ProtocolException
+
+Raised when a Chrome DevTools Protocol command fails or returns an error.
+
+```python
+class ProtocolException(Exception)
+```
+
+**Attributes:**
+
+<ResponseField name="message" type="str">
+  Human-readable error message.
+</ResponseField>
+
+<ResponseField name="code" type="int | None">
+  Error code from the protocol, if available.
+</ResponseField>
+
+<ResponseField name="args" type="tuple">
+  Original exception arguments.
+</ResponseField>
+
+**Example:**
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    try:
+        # Try to interact with non-existent node
+        await tab.send(cdp.dom.remove_node(node_id=99999))
+    except ProtocolException as e:
+        print(f"Error: {e.message}")
+        print(f"Code: {e.code}")
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+**Common Scenarios:**
+
+- Invalid node IDs in DOM operations
+- Calling CDP methods before enabling the domain
+- Invalid CSS selectors
+- Network errors
+- JavaScript execution errors
+
+### SettingClassVarNotAllowedException
+
+Raised when attempting to set class variables that should not be modified.
+
+```python
+class SettingClassVarNotAllowedException(PermissionError)
+```
+
+This is an internal exception you typically won't encounter in normal usage.
+
+## Standard Python Exceptions
+
+nodriver also raises standard Python exceptions in certain situations:
+
+### FileNotFoundError
+
+Raised when:
+- Chrome/Chromium executable cannot be found
+- Specified browser executable path doesn't exist
+- Extension files cannot be found
+
+**Example:**
+
+```python
+import nodriver as uc
+from nodriver import Config
+
+try:
+    config = Config(
+        browser_executable_path='/invalid/path/to/chrome'
+    )
+    browser = await uc.start(config)
+except FileNotFoundError as e:
+    print(f"Browser not found: {e}")
+    # Fall back to auto-detection
+    browser = await uc.start()
+```
+
+### RuntimeError
+
+Raised when:
+- Creating Browser/Tab objects outside an async context
+- Invalid browser state operations
+
+**Example:**
+
+```python
+from nodriver import Browser, Config
+
+try:
+    # This will fail - must use await Browser.create()
+    browser = Browser(Config())
+except RuntimeError as e:
+    print(f"Error: {e}")
+    # Correct way:
+    browser = await Browser.create(Config())
+```
+
+### ValueError
+
+Raised when:
+- Invalid configuration arguments
+- Invalid parameter values
+
+**Example:**
+
+```python
+from nodriver import Config
+
+try:
+    config = Config()
+    # These parameters should be set via Config properties
+    config.add_argument('--headless')
+except ValueError as e:
+    print(f"Invalid argument: {e}")
+    # Use property instead
+    config.headless = True
+```
+
+### TimeoutError
+
+Raised when:
+- Element finding operations timeout
+- Wait conditions not met within timeout period
+
+**Example:**
+
+```python
+import nodriver as uc
+import asyncio
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    try:
+        # Wait for element that doesn't exist
+        element = await tab.find('NonExistentText', timeout=5)
+    except (TimeoutError, asyncio.TimeoutError):
+        print("Element not found within timeout")
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## Error Handling Patterns
+
+### Graceful degradation
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+
+async def safe_click(tab, selector):
+    """Safely click element, return success status"""
+    try:
+        element = await tab.select(selector, timeout=3)
+        await element.click()
+        return True
+    except (ProtocolException, TimeoutError) as e:
+        print(f"Could not click {selector}: {e}")
+        return False
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    if await safe_click(tab, 'button#submit'):
+        print("Button clicked successfully")
+    else:
+        print("Could not click button, trying alternative")
+        await safe_click(tab, 'input[type="submit"]')
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Retry logic
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+import asyncio
+
+async def retry_operation(func, max_attempts=3, delay=1):
+    """Retry operation with exponential backoff"""
+    for attempt in range(max_attempts):
+        try:
+            return await func()
+        except ProtocolException as e:
+            if attempt == max_attempts - 1:
+                raise
+            wait_time = delay * (2 ** attempt)
+            print(f"Attempt {attempt + 1} failed: {e.message}")
+            print(f"Retrying in {wait_time}s...")
+            await asyncio.sleep(wait_time)
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    async def click_button():
+        element = await tab.find('Submit')
+        await element.click()
+    
+    try:
+        await retry_operation(click_button, max_attempts=3)
+        print("Operation successful")
+    except ProtocolException as e:
+        print(f"All attempts failed: {e.message}")
+    
+    browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Context manager for cleanup
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def browser_context(**kwargs):
+    """Context manager for browser with guaranteed cleanup"""
+    browser = await uc.start(**kwargs)
+    try:
+        yield browser
+    finally:
+        browser.stop()
+        print("Browser cleaned up")
+
+async def main():
+    async with browser_context(headless=True) as browser:
+        tab = await browser.get('https://example.com')
+        
+        try:
+            element = await tab.find('Login')
+            await element.click()
+        except ProtocolException as e:
+            print(f"Error during automation: {e.message}")
+        
+        # Browser automatically stopped on exit
+
+uc.loop().run_until_complete(main())
+```
+
+### Logging errors
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    try:
+        await tab.send(cdp.dom.enable())
+        doc = await tab.send(cdp.dom.get_document())
+        # ... operations ...
+    except ProtocolException as e:
+        logger.error(
+            f"Protocol error: {e.message}",
+            extra={'code': e.code, 'args': e.args}
+        )
+        raise
+    finally:
+        browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+### Type-specific handling
+
+```python
+import nodriver as uc
+from nodriver import ProtocolException
+from nodriver import cdp
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    try:
+        # Try to get element
+        await tab.send(cdp.dom.enable())
+        doc = await tab.send(cdp.dom.get_document(-1, True))
+        
+    except ProtocolException as e:
+        if e.code == -32000:
+            print("DOM not ready, waiting...")
+            await tab.wait(1)
+            # Retry
+        elif 'Cannot find context' in e.message:
+            print("Page navigated away")
+            await tab.wait(2)
+        else:
+            print(f"Unknown error: {e.message}")
+            raise
+    
+    except FileNotFoundError:
+        print("Chrome executable not found")
+        print("Please install Chrome or specify browser_executable_path")
+    
+    except RuntimeError as e:
+        print(f"Runtime error: {e}")
+        print("Make sure you're using await with async functions")
+    
+    finally:
+        browser.stop()
+
+uc.loop().run_until_complete(main())
+```
+
+## Best Practices
+
+<Note>
+  **Always handle ProtocolException** when sending CDP commands, as they can fail for many reasons.
+</Note>
+
+<Note>
+  **Use timeouts appropriately** - Set reasonable timeouts for find/select operations based on your use case.
+</Note>
+
+<Note>
+  **Log errors with context** - Include relevant information like URLs, selectors, and operation details in error logs.
+</Note>
+
+<Warning>
+  **Don't catch all exceptions** - Be specific about which exceptions you handle to avoid hiding bugs.
+</Warning>
+
+<Warning>
+  **Clean up resources** - Always stop browsers in finally blocks or use context managers to prevent resource leaks.
+</Warning>
+
+## Common Error Messages
+
+| Error Message | Cause | Solution |
+|--------------|-------|----------|
+| "Could not find node with given id" | Invalid node ID or element removed from DOM | Update element or re-query |
+| "Cannot find context with specified id" | Page navigated or context destroyed | Wait for navigation to complete |
+| "No node with given id found" | Element no longer exists | Re-query the element |
+| "DOM agent is not enabled" | Forgot to enable DOM domain | Call `await tab.send(cdp.dom.enable())` |
+| "Browser executable not found" | Chrome not installed or wrong path | Install Chrome or set `browser_executable_path` |
+
+## See also
+
+- [Tab class](/api/tab) - Methods that may raise exceptions
+- [CDP Usage](/api/cdp/usage) - Working with CDP commands
+- [ProtocolException source](/api/browser) - Exception implementation

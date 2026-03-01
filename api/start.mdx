@@ -1,0 +1,192 @@
+---
+title: start()
+description: Launch a browser instance with nodriver
+icon: rocket
+---
+
+## Overview
+
+The `start()` function is the main entry point for launching a browser with nodriver. You can call it without any parameters to quickly launch a browser instance with best practice defaults.
+
+<Note>
+  This is an async function and must be called with `await start()`
+</Note>
+
+## Signature
+
+```python
+async def start(
+    config: Optional[Config] = None,
+    *,
+    user_data_dir: Optional[PathLike] = None,
+    headless: Optional[bool] = False,
+    browser_executable_path: Optional[PathLike] = None,
+    browser_args: Optional[List[str]] = None,
+    sandbox: Optional[bool] = True,
+    lang: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    expert: Optional[bool] = None,
+    **kwargs: Optional[dict],
+) -> Browser
+```
+
+## Parameters
+
+<ParamField path="config" type="Config" default="None">
+  Configuration object. If provided, other parameters are ignored.
+</ParamField>
+
+<ParamField path="user_data_dir" type="PathLike" default="None">
+  Path to the user data directory. If not specified, a temporary directory is created.
+</ParamField>
+
+<ParamField path="headless" type="bool" default="False">
+  Run browser in headless mode. Set to `True` to run without a visible window.
+</ParamField>
+
+<ParamField path="browser_executable_path" type="PathLike" default="None">
+  Path to the browser executable. If not specified, nodriver will auto-detect the Chrome/Chromium installation.
+</ParamField>
+
+<ParamField path="browser_args" type="List[str]" default="None">
+  Additional browser arguments to pass to Chrome. Format: `["--some-param=value", "--other-param=value"]`
+</ParamField>
+
+<ParamField path="sandbox" type="bool" default="True">
+  Enable or disable sandbox mode. When `False`, adds `--no-sandbox` to browser arguments. On Linux as root user, this is automatically set to `False`.
+</ParamField>
+
+<ParamField path="lang" type="str" default="None">
+  Language string for the browser (e.g., "en-US").
+</ParamField>
+
+<ParamField path="host" type="str" default="None">
+  Host for remote debugging connection. If both `host` and `port` are provided, nodriver connects to an existing browser instead of launching a new one.
+</ParamField>
+
+<ParamField path="port" type="int" default="None">
+  Port for remote debugging connection. If both `host` and `port` are provided, nodriver connects to an existing browser instead of launching a new one.
+</ParamField>
+
+<ParamField path="expert" type="bool" default="None">
+  Enable expert mode. When `True`, includes `--disable-web-security` and `--disable-site-isolation-trials` parameters, and enables debugging features like forcing shadow roots to open mode.
+</ParamField>
+
+<ParamField path="**kwargs" type="dict" default="None">
+  Additional keyword arguments passed to the Config object.
+</ParamField>
+
+## Returns
+
+<ResponseField name="Browser" type="Browser">
+  A Browser instance ready to control tabs and navigate to URLs.
+</ResponseField>
+
+## Examples
+
+### Basic usage
+
+```python
+import nodriver as uc
+
+async def main():
+    # Launch with default settings
+    browser = await uc.start()
+    
+    # Navigate to a URL
+    tab = await browser.get('https://example.com')
+    
+    # Clean up
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+### Headless mode
+
+```python
+import nodriver as uc
+
+async def main():
+    # Launch in headless mode
+    browser = await uc.start(headless=True)
+    tab = await browser.get('https://example.com')
+    
+    # Take a screenshot
+    await tab.save_screenshot('screenshot.png')
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+### Custom browser arguments
+
+```python
+import nodriver as uc
+
+async def main():
+    # Launch with custom arguments
+    browser = await uc.start(
+        browser_args=[
+            '--window-size=1920,1080',
+            '--disable-extensions'
+        ]
+    )
+    tab = await browser.get('https://example.com')
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+### Connect to existing browser
+
+```python
+import nodriver as uc
+
+async def main():
+    # Connect to existing Chrome instance running with remote debugging
+    # Start Chrome with: chrome --remote-debugging-port=9222
+    browser = await uc.start(host='127.0.0.1', port=9222)
+    tab = await browser.get('https://example.com')
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+### Expert mode
+
+```python
+import nodriver as uc
+
+async def main():
+    # Launch with expert mode for advanced debugging
+    browser = await uc.start(expert=True)
+    tab = await browser.get('https://example.com')
+    
+    # Shadow roots will be forced to open mode
+    # Web security is disabled for cross-origin access
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(main())
+```
+
+## Notes
+
+<Warning>
+  When running as root on Linux, the sandbox is automatically disabled. This is required for Chrome to start.
+</Warning>
+
+<Note>
+  If you provide both `host` and `port`, nodriver will connect to an existing browser instance instead of launching a new one.
+</Note>
+
+## See also
+
+- [Browser class](/api/browser) - The Browser object returned by `start()`
+- [Config class](/api/config) - Configuration object for advanced usage
+- [loop()](/api/loop) - Create an event loop for running async code

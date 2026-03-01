@@ -1,0 +1,295 @@
+---
+title: Form filling and submission
+description: Automate form interactions including text inputs, dropdowns, file uploads, and submissions
+---
+
+This example demonstrates how to automate complex forms, including handling dynamic fields, dropdowns, and file uploads using a real Twitter account creation flow.
+
+## Complete example
+
+Here's a complete example that automates Twitter account creation:
+
+```python
+import asyncio
+import random
+import string
+import nodriver as uc
+
+months = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+]
+
+async def main():
+    driver = await uc.start()
+    tab = await driver.get("https://twitter.com")
+    
+    # Find and click create account button
+    print('finding the "create account" button')
+    create_account = await tab.find("create account", best_match=True)
+    
+    print('"create account" => click')
+    await create_account.click()
+    
+    print("finding the email input field")
+    email = await tab.select("input[type=email]")
+    
+    # Handle dynamic form - sometimes phone is shown instead
+    if not email:
+        use_mail_instead = await tab.find("use email instead")
+        await use_mail_instead.click()
+        email = await tab.select("input[type=email]")
+    
+    # Generate random email
+    randstr = lambda k: "".join(random.choices(string.ascii_letters, k=k))
+    
+    print('filling in the "email" input field')
+    await email.send_keys("".join([randstr(8), "@", randstr(8), ".com"]))
+    
+    # Fill in name field
+    print("finding the name input field")
+    name = await tab.select("input[type=text]")
+    
+    print('filling in the "name" input field')
+    await name.send_keys(randstr(8))
+    
+    # Handle multiple select fields using unpacking
+    print('finding the "month", "day" and "year" fields in 1 go')
+    sel_month, sel_day, sel_year = await tab.select_all("select")
+    
+    print('filling in the "month" input field')
+    await sel_month.send_keys(months[random.randint(0, 11)].title())
+    
+    print('filling in the "day" input field')
+    await sel_day.send_keys(str(random.randint(1, 28)))
+    
+    print('filling in the "year" input field')
+    await sel_year.send_keys(str(random.randint(1980, 2005)))
+    
+    await tab
+    
+    # Handle cookie consent
+    cookie_bar_accept = await tab.find("accept all", best_match=True)
+    if cookie_bar_accept:
+        await cookie_bar_accept.click()
+    
+    await tab.sleep(1)
+    
+    # Click next button
+    next_btn = await tab.find(text="next", best_match=True)
+    await next_btn.mouse_click()
+    
+    print("sleeping 2 seconds")
+    await tab.sleep(2)
+    
+    print('finding "next" button')
+    next_btn = await tab.find(text="next", best_match=True)
+    print('clicking "next" button')
+    await next_btn.mouse_click()
+    
+    # Wait for button to appear
+    await tab.select("[role=button]")
+    
+    print('finding "sign up" button')
+    sign_up_btn = await tab.find("Sign up", best_match=True)
+    print('clicking "sign up" button')
+    await sign_up_btn.click()
+    
+    print('the rest of the "implementation" is out of scope')
+    await tab.sleep(10)
+    driver.stop()
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Step-by-step breakdown
+
+<Steps>
+  <Step title="Handle dynamic fields">
+    Forms often change based on user input or location. Handle this gracefully:
+    
+    ```python
+    email = await tab.select("input[type=email]")
+    
+    # Check if element exists
+    if not email:
+        # Click to show email field instead of phone
+        use_mail_instead = await tab.find("use email instead")
+        await use_mail_instead.click()
+        email = await tab.select("input[type=email]")
+    ```
+  </Step>
+
+  <Step title="Fill text inputs">
+    Send text to input fields using `send_keys()`:
+    
+    ```python
+    await email.send_keys("user@example.com")
+    await name.send_keys("John Doe")
+    ```
+  </Step>
+
+  <Step title="Handle dropdowns">
+    Select options from dropdown menus:
+    
+    ```python
+    # Get all select elements
+    sel_month, sel_day, sel_year = await tab.select_all("select")
+    
+    # Send the option text
+    await sel_month.send_keys("January")
+    await sel_day.send_keys("15")
+    await sel_year.send_keys("1990")
+    ```
+  </Step>
+
+  <Step title="Submit the form">
+    Find and click the submit button:
+    
+    ```python
+    # Use best_match to find the right button
+    submit_btn = await tab.find("Sign up", best_match=True)
+    await submit_btn.click()
+    ```
+  </Step>
+</Steps>
+
+## File upload example
+
+Here's how to upload files to a form (from the Imgur example):
+
+```python
+from pathlib import Path
+import nodriver as uc
+
+async def main():
+    browser = await uc.start()
+    tab = await browser.get("https://imgur.com")
+    
+    # Create a screenshot to upload
+    save_path = Path("screenshot.jpg").resolve()
+    temp_tab = await browser.get(
+        "https://github.com/ultrafunkamsterdam/undetected-chromedriver",
+        new_tab=True
+    )
+    
+    await temp_tab
+    await temp_tab.save_screenshot(save_path)
+    await temp_tab.close()
+    
+    # Accept cookies
+    consent = await tab.find("Consent", best_match=True)
+    await consent.click()
+    
+    # Click new post
+    await (await tab.find("new post", best_match=True)).click()
+    
+    # Upload file
+    file_input = await tab.select("input[type=file]")
+    await file_input.send_file(save_path)
+    
+    # Wait for upload to complete
+    DELAY = 2
+    await tab.wait(DELAY)
+    
+    # Wait for success toast
+    await tab.select(".Toast-message--check")
+    
+    # Fill in title
+    title_field = await tab.find("give your post a unique title", best_match=True)
+    await title_field.send_keys("undetected nodriver")
+    
+    # Get the share link
+    grab_link = await tab.find("grab a link", best_match=True)
+    await grab_link.click()
+    
+    await tab.wait(DELAY)
+    
+    # Extract the uploaded URL
+    input_thing = await tab.select("input[value^=https]")
+    my_link = input_thing.attrs.value
+    
+    print(my_link)
+    await tab
+
+if __name__ == "__main__":
+    uc.loop().run_until_complete(main())
+```
+
+## Key techniques
+
+### Working with multiple fields
+
+Use unpacking to assign multiple elements at once:
+
+```python
+# Get all select elements
+month, day, year = await tab.select_all("select")
+
+# Or all inputs
+inputs = await tab.select_all("input[type=text]")
+first_name, last_name, email = inputs
+```
+
+### Handling conditional elements
+
+```python
+# Check if element exists before using
+phone_field = await tab.select("input[type=tel]")
+if phone_field:
+    await phone_field.send_keys("555-1234")
+else:
+    # Handle alternative flow
+    pass
+```
+
+### Waiting for form updates
+
+<CodeGroup>
+```python Wait for specific element
+# Wait for element to appear after form submission
+confirmation = await tab.select(".success-message")
+```
+
+```python Wait with timeout
+# Wait for page to update
+await tab.sleep(2)
+
+# Or let the page "breathe"
+await tab
+```
+</CodeGroup>
+
+<Note>
+  When dealing with JavaScript-heavy sites, use `await tab.wait(seconds)` or `await tab` to give the page time to render dynamic content.
+</Note>
+
+## Advanced patterns
+
+### Finding elements by placeholder
+
+When text is in a placeholder attribute rather than a text node:
+
+```python
+# This works for placeholder attributes
+title_field = await tab.find("give your post a unique title", best_match=True)
+await title_field.send_keys("My Title")
+```
+
+### Using CSS attribute selectors
+
+```python
+# Select by attribute value
+email = await tab.select("input[type=email]")
+
+# Select by attribute starts with
+link_input = await tab.select("input[value^=https]")
+
+# Select by role
+button = await tab.select("[role=button]")
+```
+
+<Warning>
+  File uploads take time to process. Always wait for confirmation (like a toast message or progress indicator) before continuing.
+</Warning>

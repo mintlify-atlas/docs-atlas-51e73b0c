@@ -1,80 +1,427 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with nodriver in minutes - from basic navigation to advanced element interaction
 ---
 
-## Get started in three steps
+## Your first script
 
-Get your documentation site running locally and make your first customization.
+Let's create a simple script that opens a browser, navigates to a page, and takes a screenshot.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Create a new Python file">
+    Create a file called `first_script.py`:
+    ```python
+    import nodriver as uc
+
+    async def main():
+        # Start the browser
+        browser = await uc.start()
+        
+        # Navigate to a page
+        page = await browser.get('https://www.nowsecure.nl')
+        
+        # Take a screenshot
+        await page.save_screenshot()
+        
+        print("Screenshot saved!")
+        
+        # Clean up
+        browser.stop()
+
+    if __name__ == '__main__':
+        # Run the async function
+        uc.loop().run_until_complete(main())
+    ```
+  </Step>
+  
+  <Step title="Run the script">
+    ```bash
+    python first_script.py
+    ```
+    
+    You should see a browser window open, navigate to the page, and then close. A screenshot will be saved in your current directory.
+  </Step>
+</Steps>
+
+<Tip>
+  nodriver uses `uc.loop().run_until_complete()` instead of `asyncio.run()` for better compatibility and control.
+</Tip>
+
+## Understanding the basics
+
+### Starting a browser
+
+The `start()` function launches a browser and returns a `Browser` instance:
+
+```python
+import nodriver as uc
+
+# Basic start
+browser = await uc.start()
+
+# With options
+browser = await uc.start(
+    headless=False,  # Show the browser window
+    browser_args=['--window-size=1920,1080']
+)
+```
+
+<Note>
+  By default, nodriver creates a fresh profile that's automatically cleaned up when the browser closes. This ensures a clean state for each run.
+</Note>
+
+### Navigating to pages
+
+Use `browser.get()` to navigate:
+
+```python
+# Open in the main tab
+page = await browser.get('https://www.google.com')
+
+# Open in a new tab
+page2 = await browser.get('https://www.github.com', new_tab=True)
+
+# Open in a new window
+page3 = await browser.get('https://www.stackoverflow.com', new_window=True)
+```
+
+## Finding elements
+
+nodriver provides multiple ways to find elements on a page:
+
+<CodeGroup>
+```python Find by text
+# Find by text content (smart matching)
+button = await page.find("accept all")
+await button.click()
+
+# Find with best match (shortest text wins)
+login_btn = await page.find("login", best_match=True)
+
+# Find all occurrences
+links = await page.find_all("click here")
+```
+
+```python CSS selectors
+# Select by CSS selector
+email_input = await page.select("input[type=email]")
+await email_input.send_keys("user@example.com")
+
+# Select all matching elements
+all_links = await page.select_all("a[href]")
+for link in all_links:
+    print(await link.get_attribute('href'))
+```
+
+```python XPath
+# Find using XPath
+submit_btn = await page.xpath("//button[@type='submit']")
+await submit_btn.click()
+
+# XPath with timeout
+input_field = await page.xpath("//input[@name='search']", timeout=5)
+```
+</CodeGroup>
+
+<Info>
+  All find methods automatically wait for elements to appear (default timeout: 2.5 seconds). This eliminates the need for explicit waits in most cases.
+</Info>
+
+## Interacting with elements
+
+Once you have an element, you can interact with it:
+
+```python
+# Click an element
+await element.click()
+
+# Type text
+await input_field.send_keys("search query")
+
+# Clear input
+await input_field.clear_input()
+
+# Get text content
+text = await element.text
+
+# Get attributes
+href = await link.get_attribute('href')
+
+# Mouse operations
+await element.mouse_move()
+await element.mouse_drag([250, 250], relative=True)
+
+# Scroll into view
+await element.scroll_into_view()
+
+# Flash element (visual debugging)
+await element.flash()
+```
+
+## Real-world example
+
+Let's build a script that searches Google:
+
+```python
+import nodriver as uc
+
+async def google_search():
+    browser = await uc.start()
+    
+    # Navigate to Google
+    tab = await browser.get("https://www.google.com/?hl=en")
+    
+    # Handle cookie consent if present
+    reject_btn = await tab.find("reject all", best_match=True)
+    if reject_btn:
+        await reject_btn.click()
+    
+    # Find search input (it's a textarea on Google)
+    search_input = await tab.select("textarea")
+    
+    # Type search query
+    await search_input.send_keys("undetected nodriver")
+    
+    # Find and click search button
+    search_btn = await tab.find("google search", best_match=True)
+    await search_btn.click()
+    
+    # Wait for results and scroll
+    await tab.sleep(2)
+    for _ in range(3):
+        await tab.scroll_down(100)
+        await tab.sleep(0.5)
+    
+    # Get all search result links
+    results = await tab.select_all("h3")
+    print(f"Found {len(results)} results")
+    
+    for i, result in enumerate(results[:5], 1):
+        text = await result.text
+        print(f"{i}. {text}")
+    
+    # Take a screenshot
+    await tab.save_screenshot("google_results.png")
+    
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(google_search())
+```
+
+<Tip>
+  This example is adapted from the real examples in the nodriver repository. Check `example/network_monitor.py` for the full source.
+</Tip>
+
+## Working with multiple tabs
+
+nodriver makes it easy to manage multiple tabs:
+
+```python
+import nodriver as uc
+
+async def multi_tab_example():
+    browser = await uc.start()
+    
+    # Open multiple tabs
+    tab1 = await browser.get('https://www.github.com')
+    tab2 = await browser.get('https://www.stackoverflow.com', new_tab=True)
+    tab3 = await browser.get('https://www.google.com', new_tab=True)
+    
+    # Iterate through all tabs
+    for tab in browser.tabs:
+        await tab.activate()
+        print(f"Current URL: {tab.url}")
+        await tab.scroll_down(200)
+        await tab.sleep(1)
+    
+    # Close specific tab
+    await tab2.close()
+    
+    # Close all except main tab
+    for tab in browser.tabs:
+        if tab != browser.main_tab:
+            await tab.close()
+    
+    browser.stop()
+
+if __name__ == '__main__':
+    uc.loop().run_until_complete(multi_tab_example())
+```
+
+## Advanced configuration
+
+Customize browser behavior with the Config object:
+
+```python
+from nodriver import Config, start
+
+async def advanced_setup():
+    # Create config
+    config = Config()
+    config.headless = False
+    config.browser_args = [
+        '--window-size=1920,1080',
+        '--start-maximized'
+    ]
+    
+    # Use custom profile (won't be auto-cleaned)
+    config.user_data_dir = "/path/to/profile"
+    
+    # Use specific browser
+    config.browser_executable_path = "/path/to/chrome"
+    
+    # Start with config
+    browser = await start(config=config)
+    
+    # Your automation here
+    page = await browser.get('https://example.com')
+    
+    browser.stop()
+```
+
+Or pass options directly to `start()`:
+
+```python
+browser = await uc.start(
+    headless=False,
+    user_data_dir="/path/to/profile",
+    browser_executable_path="/path/to/chrome",
+    browser_args=['--window-size=1920,1080'],
+    lang="en-US"
+)
+```
+
+## Handling common scenarios
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Accordion title="Waiting for page load">
+    ```python
+    # Wait for body element (indicates page loaded)
+    await tab.select('body')
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+    # Or use sleep for a specific duration
+    await tab.sleep(2)
+    
+    # Wait for events to process
+    await tab  # Short wait for CDP events
+    ```
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+  
+  <Accordion title="Working with iframes">
+    nodriver automatically searches within iframes when using `find()` and `select()` methods:
+    ```python
+    # Searches in main frame and iframes
+    element = await tab.select("#element-in-iframe")
+    ```
+  </Accordion>
+  
+  <Accordion title="Handling dynamic content">
+    ```python
+    # Find methods retry until timeout
+    # This element will be found once it appears
+    button = await tab.find("submit", timeout=10)
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    # For elements that might not appear
+    optional_elem = await tab.find("optional text")
+    if optional_elem:
+        await optional_elem.click()
+    ```
+  </Accordion>
+  
+  <Accordion title="Taking screenshots">
+    ```python
+    # Save screenshot with default name
+    await tab.save_screenshot()
+    
+    # Custom filename
+    await tab.save_screenshot("my_screenshot.png")
+    
+    # Get page content
+    html = await tab.get_content()
+    ```
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## Common patterns
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+### Form filling
+
+```python
+async def fill_form():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com/form')
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    # Fill text inputs
+    name_input = await tab.select("input[name='name']")
+    await name_input.send_keys("John Doe")
+    
+    email_input = await tab.select("input[type='email']")
+    await email_input.send_keys("john@example.com")
+    
+    # Select from dropdown
+    dropdown = await tab.select("select[name='country']")
+    await dropdown.send_keys("United States")
+    
+    # Submit form
+    submit_btn = await tab.select("button[type='submit']")
+    await submit_btn.click()
+    
+    browser.stop()
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+### Cookie management
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```python
+async def cookie_example():
+    browser = await uc.start()
+    tab = await browser.get('https://example.com')
+    
+    # Perform login or other actions
+    # ...
+    
+    # Save cookies to file
+    await tab.save_cookies('cookies.json')
+    
+    # Later, load cookies
+    browser2 = await uc.start()
+    tab2 = await browser2.get('https://example.com')
+    await tab2.load_cookies('cookies.json')
+    
+    # Now logged in without repeating login steps
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+Now that you understand the basics, explore more advanced features:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="API Reference"
+    icon="book"
+    href="/api/start"
+  >
+    Explore the complete API documentation
+  </Card>
+  <Card
+    title="Examples"
+    icon="code"
+    href="/examples/basic-scraping"
+  >
+    Learn from real-world automation scripts
+  </Card>
+  <Card
+    title="Browser class"
+    icon="window"
+    href="/api/browser"
+  >
+    Deep dive into browser control and configuration
+  </Card>
+  <Card
+    title="Tab class"
+    icon="browser"
+    href="/api/tab"
+  >
+    Master page interaction and element manipulation
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

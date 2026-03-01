@@ -1,0 +1,279 @@
+---
+title: Browser class and lifecycle
+description: Understanding the Browser class, its lifecycle, and how to create and manage browser instances
+---
+
+The `Browser` object is the root of the nodriver hierarchy and represents the browser process. It manages tabs, browser contexts, and the connection to the Chrome DevTools Protocol.
+
+## Creating a browser instance
+
+You create browser instances using the asynchronous `Browser.create()` method, not through direct instantiation:
+
+```python
+import nodriver as uc
+
+browser = await uc.Browser.create()
+```
+
+<Note>
+  The Browser object must be created using `await Browser.create()` rather than `Browser()`. Direct instantiation will raise a `RuntimeError`.
+</Note>
+
+## Configuration options
+
+The `create()` method accepts several configuration parameters:
+
+<ParamField path="config" type="Config" default="None">
+  A Config object with browser settings. If not provided, a default configuration is created.
+</ParamField>
+
+<ParamField path="user_data_dir" type="PathLike" default="None">
+  Directory for browser profile data. If not specified, a temporary directory is created.
+</ParamField>
+
+<ParamField path="headless" type="bool" default="False">
+  Run the browser in headless mode without a visible window.
+</ParamField>
+
+<ParamField path="browser_executable_path" type="PathLike" default="None">
+  Path to the Chrome/Chromium executable. Auto-detected if not provided.
+</ParamField>
+
+<ParamField path="browser_args" type="List[str]" default="None">
+  Additional command-line arguments to pass to the browser.
+</ParamField>
+
+<ParamField path="sandbox" type="bool" default="True">
+  Enable or disable the browser sandbox. Automatically disabled when running as root.
+</ParamField>
+
+<ParamField path="host" type="str" default="None">
+  Host address for the DevTools Protocol connection. Defaults to "127.0.0.1".
+</ParamField>
+
+<ParamField path="port" type="int" default="None">
+  Port for the DevTools Protocol connection. Auto-assigned if not provided.
+</ParamField>
+
+### Example with configuration
+
+```python
+import nodriver as uc
+
+browser = await uc.Browser.create(
+    headless=False,
+    sandbox=True,
+    browser_args=['--window-size=1920,1080']
+)
+```
+
+## Key properties
+
+### Main tab
+
+Access the primary tab that was launched with the browser:
+
+```python
+tab = browser.main_tab
+```
+
+### All tabs
+
+Get a list of all open tabs (targets of type "page"):
+
+```python
+tabs = browser.tabs
+```
+
+### Cookies
+
+Access the browser's cookie jar for managing cookies across all tabs:
+
+```python
+cookies = browser.cookies
+all_cookies = await cookies.get_all()
+```
+
+## Navigation and tab management
+
+### Navigate to a URL
+
+Use the `get()` method to navigate in the current tab or open new tabs/windows:
+
+```python
+# Navigate in existing tab
+tab = await browser.get('https://example.com')
+
+# Open in new tab
+tab = await browser.get('https://example.com', new_tab=True)
+
+# Open in new window
+tab = await browser.get('https://example.com', new_window=True)
+```
+
+### Accessing tabs
+
+You can access tabs by index or search:
+
+```python
+# By index
+first_tab = browser[0]
+second_tab = browser[1]
+
+# By search string (matches target info)
+google_tab = browser['google']
+
+# Slice notation
+first_three = browser[0:3]
+```
+
+## Browser contexts
+
+Create isolated browser contexts, useful for different proxy configurations:
+
+```python
+tab = await browser.create_context(
+    url='https://example.com',
+    new_window=True,
+    proxy_server='http://proxy.example.com:8080',
+    dispose_on_detach=True
+)
+```
+
+<ParamField path="url" type="str" default="'chrome://welcome'">
+  URL to open in the new context.
+</ParamField>
+
+<ParamField path="new_window" type="bool" default="True">
+  Open in a new window instead of a tab.
+</ParamField>
+
+<ParamField path="proxy_server" type="str" default="None">
+  Proxy server to use. Supports HTTP, HTTPS, and SOCKS5 with authentication.
+  Format: `http://username:password@server:port` or `socks://username:password@server:port`
+</ParamField>
+
+<ParamField path="dispose_on_detach" type="bool" default="True">
+  Automatically dispose the context when the debugging session disconnects.
+</ParamField>
+
+<Warning>
+  Chrome typically only supports one proxy per browser instance. Use `create_context()` with different proxy settings to work around this limitation.
+</Warning>
+
+## Permissions
+
+Grant all browser permissions at once:
+
+```python
+await browser.grant_all_permissions()
+```
+
+This grants permissions for:
+- Audio and video capture
+- Clipboard access
+- Geolocation
+- Notifications
+- Sensors
+- And many more
+
+## Window management
+
+### Tile windows
+
+Arrange multiple browser windows in a grid layout:
+
+```python
+await browser.tile_windows(max_columns=2)
+```
+
+## Lifecycle management
+
+### Waiting and sleeping
+
+Allow the browser to update its state:
+
+```python
+# Wait and update targets
+await browser.wait(0.5)
+
+# Or use the alias
+await browser.sleep(1)
+```
+
+### Stopping the browser
+
+Terminate the browser process:
+
+```python
+browser.stop()
+```
+
+<Note>
+  The browser automatically attempts to clean up on exit, but calling `stop()` explicitly ensures proper shutdown.
+</Note>
+
+### Using context manager
+
+For automatic cleanup, use the `BrowserContext` context manager:
+
+```python
+from nodriver import BrowserContext
+
+async with BrowserContext(headless=False) as browser:
+    tab = await browser.get('https://example.com')
+    # ... do your work
+# Browser automatically closes here
+```
+
+<ParamField path="keep_open" type="bool" default="False">
+  Set to `True` to prevent automatic browser closure when exiting the context.
+</ParamField>
+
+## Iteration
+
+Iterate through all tabs:
+
+```python
+for tab in browser:
+    print(tab.target.url)
+```
+
+## Connection details
+
+Access the WebSocket debugger URL:
+
+```python
+ws_url = browser.websocket_url
+```
+
+Check if the browser is still running:
+
+```python
+if browser.stopped:
+    print('Browser has been terminated')
+```
+
+## Best practices
+
+<Accordion title="Use await for browser operations">
+  Most browser operations are asynchronous. Always use `await` when calling browser methods.
+</Accordion>
+
+<Accordion title="Keep references to tabs">
+  Store tab objects when you need to interact with specific tabs later. The browser maintains a list of all targets, but keeping your own references makes code clearer.
+</Accordion>
+
+<Accordion title="Handle browser cleanup">
+  Always ensure the browser is properly closed using `stop()` or a context manager to avoid orphaned browser processes.
+</Accordion>
+
+<Accordion title="Connect to existing browsers">
+  You can connect to an already-running Chrome instance by specifying both `host` and `port` parameters when creating the browser.
+</Accordion>
+
+## Related documentation
+
+- [Tab management](/concepts/tabs) - Learn about controlling individual tabs
+- [Configuration](/concepts/configuration) - Detailed configuration options
+- [Element interaction](/concepts/elements) - Working with page elements
